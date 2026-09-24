@@ -627,6 +627,10 @@ So the transaction, its checkpoint, and its postconditions are the local ones.
 The primary passes `<harness> <model|default|-> <effort|default|->` explicitly, using `default` when an axis has no parent pin.
 It passes them explicitly because `config/secondmate-harness` is not inherited into a second mate's home, and the file on that host belongs to a different home.
 Letting the far side re-resolve it would silently move the mate onto another runtime.
+
+A live remote relaunch also requires a handoff digest with the context streamed over stdin, or the explicit `--abandon-live-context` choice; the remote control validates and retains its host-side copy until the replacement confirms its transaction-bound receipt and readiness to resume.
+The parent-side restart owner packages the exact successful persist request and response for this handoff, and retains its own copy while delivery or receipt is uncertain.
+Dead-agent recovery is custody-free.
 SSH exit 255 leaves completion unknown and the route preserved, exactly as every other verb here.
 Move a live remote second mate onto a newly pinned harness, model, or effort with [`bin/fm-remote-secondmate-relaunch.sh`](../bin/fm-remote-secondmate-relaunch.sh) rather than calling `relaunch` through `fm-on.sh` directly: the host-local relaunch it drives can only rewrite the host's own endpoint record, so this wrapper reads the confirmed identity back from that record afterward and republishes the primary's own route metadata to match, the same way launch already records a fresh route.
 
