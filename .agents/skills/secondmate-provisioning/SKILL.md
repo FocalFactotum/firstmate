@@ -232,6 +232,7 @@ To move a live LOCAL secondmate onto a newly pinned harness, model, or effort wi
 That plane refuses a remotely placed secondmate by name, because its agent runs on another host where none of the plane's postconditions can be read.
 Move a REMOTE one with `bin/fm-remote-secondmate-relaunch.sh <id> <harness> <model|default|-> <effort|default|-> [<handoff-sha256> | --abandon-live-context]`, which runs that same custody-gated control-plane relaunch on its host and then republishes this primary's own route metadata from the identity the host confirmed; pass the profile explicitly and use `default` for an absent pin, because `config/secondmate-harness` is not inherited and the copy on that host belongs to a different home ([`docs/remote-secondmates.md`](../../../docs/remote-secondmates.md)).
 Never call `fm-remote-secondmate-control.sh relaunch` through `fm-on.sh` directly for this: it leaves this primary's own record naming the runtime the mate used to run.
+For live context custody, supply the handoff digest and stream its contents through that wrapper, or obtain explicit authority to abandon live context, as described in [`docs/remote-secondmates.md`](../../../docs/remote-secondmates.md).
 A successful update selects every live mate of both placements for a restart attempt, including one already on the target commit; the `/updatefirstmate` skill owns that pass, and `bin/fm-secondmate-restart.sh` owns its persist gate and failure vocabulary.
 
 Do not reconstruct a secondmate's whole tree from the main home.
