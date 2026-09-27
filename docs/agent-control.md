@@ -97,9 +97,10 @@ Switching harness is therefore one ordinary relaunch rather than a separate mech
 
 A live secondmate's standing charter is not a copy of its current conversation, so replacing its agent without a handoff can discard context that exists nowhere durable.
 A live secondmate relaunch through `bin/fm-control.sh` therefore requires either `--handoff-file <path> --handoff-sha256 <sha256>` or `--abandon-live-context`.
-The handoff must be a readable, single-link text file whose SHA-256 matches the supplied digest; the control plane snapshots it before stopping the old agent and places it in a replacement-only brief without rewriting the standing charter.
+The handoff must be a nonempty, readable, single-link regular file without NUL bytes whose SHA-256 matches the supplied digest; the control plane snapshots it before stopping the old agent and places it in a replacement-only brief without rewriting the standing charter.
 The replacement must read the handoff and confirm both receipt and readiness to resume through `bin/fm-context-handoff-receipt.sh`, with a receipt bound to that relaunch transaction and handoff digest.
 The control-owned raw snapshot and full delivery copy remain until that receipt is verified; an absent or invalid receipt leaves them in place and reports that resumption is unconfirmed.
+After confirmation, the control plane also retires a Claude replacement's handoff-bearing operational launch record before reporting complete custody cleanup.
 `fm-secondmate-restart.sh` separately retires its parent-side source only after the control command returns successfully.
 `--abandon-live-context` is a distinct, auditable no-handoff path and requires current explicit captain authority.
 An already-dead or proven-missing agent can be relaunched without either custody option, because it cannot provide recoverable live conversation; the ordinary endpoint recovery proof still applies.
