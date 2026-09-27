@@ -811,6 +811,7 @@ capture_secondmate_handoff() {
   esac
   [ -f "$HANDOFF_FILE" ] && [ ! -L "$HANDOFF_FILE" ] && [ -r "$HANDOFF_FILE" ] \
     || die "--handoff-file '$HANDOFF_FILE' must be a readable regular file, not a symlink"
+  [ -s "$HANDOFF_FILE" ] || die "--handoff-file must not be empty"
   links=$(fm_pr_file_link_count "$HANDOFF_FILE") || die "handoff file link count cannot be read"
   [ "$links" = 1 ] || die "--handoff-file must not be hardlinked"
   source_digest=$(fm_pr_sha256 "$HANDOFF_FILE") || die "handoff file cannot be hashed"
@@ -822,6 +823,7 @@ capture_secondmate_handoff() {
     || die "could not snapshot the live secondmate context handoff"
   [ -f "$HANDOFF_STAGE" ] && [ ! -L "$HANDOFF_STAGE" ] \
     || die "captured secondmate context handoff is not a regular file"
+  [ -s "$HANDOFF_STAGE" ] || die "captured secondmate context handoff is empty"
   [ "$(fm_pr_file_link_count "$HANDOFF_STAGE")" = 1 ] \
     || die "captured secondmate context handoff must not be hardlinked"
   captured_digest=$(fm_pr_sha256 "$HANDOFF_STAGE") \
@@ -952,6 +954,21 @@ wait_for_secondmate_handoff_receipt() {
 }
 
 retire_confirmed_secondmate_handoff() {
+  local record encoded_brief
+  if [ "$TARGET_HARNESS" = claude ]; then
+    encoded_brief=$("$SCRIPT_DIR/fm-operational-input.sh" encode launch-brief < "$REPLACEMENT_BRIEF" && printf x) \
+      || die "replacement confirmed context receipt, but its operational launch record cannot be identified"
+    encoded_brief=${encoded_brief%x}
+    for record in "$WT/state/operational-inbox/"*.msg; do
+      [ -f "$record" ] && [ ! -L "$record" ] || continue
+      if cmp -s "$record" <(printf '%s' "$encoded_brief"); then
+        [ "$(fm_pr_file_link_count "$record")" = 1 ] \
+          || die "replacement confirmed context receipt, but its operational launch record is hardlinked"
+        rm -f -- "$record" \
+          || die "replacement confirmed context receipt, but its operational launch record could not be retired"
+      fi
+    done
+  fi
   rm -f -- "$HANDOFF_SNAPSHOT" \
     || die "replacement confirmed context receipt, but the raw handoff snapshot could not be retired"
   rm -f -- "$REPLACEMENT_BRIEF" \
