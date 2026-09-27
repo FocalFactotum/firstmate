@@ -277,7 +277,7 @@ cmd_relaunch() {
   [ "$effort" != - ] || effort=default
   control_args=("$id" relaunch --harness "$harness" --model "$model" --effort "$effort")
   case "$custody" in
-    ''|-) ;;
+    '') ;;
     --abandon-live-context)
       control_args+=(--abandon-live-context)
       ;;

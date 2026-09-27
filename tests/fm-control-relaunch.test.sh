@@ -1494,7 +1494,7 @@ test_live_secondmate_relaunch_requires_explicit_context_custody() {
 }
 
 test_live_secondmate_handoff_waits_for_receipt_before_retiring_copies() {
-  local dir handoff digest out rc raw brief receipt
+  local dir handoff digest out rc raw brief receipt record
   dir=$(new_case sm-custody-receipt smreceipt)
   add_secondmate_task "$dir" smreceipt
   handoff="$dir/handoff.md"
@@ -1514,13 +1514,35 @@ test_live_secondmate_handoff_waits_for_receipt_before_retiring_copies() {
   receipt=$(journal_field "$dir" smreceipt receipt_file)
   [ "$raw" = retired ] || fail "confirmed receipt should retire the raw custody snapshot"
   [ "$brief" = retired ] || fail "confirmed receipt should retire the redundant full launch copy"
+  for record in "$dir/smhome/state/operational-inbox/"*.msg; do
+    [ -f "$record" ] || continue
+    if grep -Fq 'Persist request and exact correlated answer.' "$record"; then
+      fail "confirmed receipt left the handoff in an operational launch record"
+    fi
+  done
   assert_present "$receipt" "confirmed receipt should retain bounded non-content evidence"
   [ -f "$handoff" ] || fail "direct fm-control must not delete its caller-owned source handoff"
   pass "fm-control relaunch: exact context reaches the replacement and copies retire only after receipt"
 }
 
+test_empty_live_secondmate_handoff_refuses_before_stop() {
+  local dir handoff digest out rc
+  dir=$(new_case sm-custody-empty smempty)
+  add_secondmate_task "$dir" smempty
+  handoff="$dir/handoff.md"
+  : > "$handoff"
+  digest=$(shasum -a 256 "$handoff" | awk '{print $1}')
+  out=$(run_control "$dir" smempty relaunch --handoff-file "$handoff" \
+    --handoff-sha256 "$digest" 2>&1); rc=$?
+  expect_code 1 "$rc" "an empty handoff must refuse live replacement"
+  assert_contains "$out" 'must not be empty' "an empty handoff refusal should identify the cause"
+  [ "$(cat "$dir/fake/command")" = claude ] || fail "an empty handoff stopped the old agent"
+  [ ! -s "$dir/fake/literal" ] || fail "an empty handoff sent lifecycle input"
+  pass "fm-control relaunch: empty live context cannot satisfy custody"
+}
+
 test_unconfirmed_live_secondmate_handoff_retains_full_context() {
-  local dir handoff digest out rc raw brief
+  local dir handoff digest out rc raw brief record retained=0
   dir=$(new_case sm-custody-unconfirmed smuncertain)
   add_secondmate_task "$dir" smuncertain
   handoff="$dir/handoff.md"
@@ -1537,6 +1559,13 @@ test_unconfirmed_live_secondmate_handoff_retains_full_context() {
   brief=$(journal_field "$dir" smuncertain replacement_brief)
   assert_present "$raw" "uncertain delivery must retain the raw handoff snapshot"
   assert_present "$brief" "uncertain delivery must retain the full replacement instructions"
+  for record in "$dir/smhome/state/operational-inbox/"*.msg; do
+    [ -f "$record" ] || continue
+    if grep -Fq 'Context that must survive an unconfirmed launch.' "$record"; then
+      retained=1
+    fi
+  done
+  [ "$retained" = 1 ] || fail "uncertain Claude delivery lost its operational launch record"
   [ "$(shasum -a 256 "$raw" | awk '{print $1}')" = "$digest" ] \
     || fail "the retained raw snapshot changed after the uncertain delivery"
   assert_absent "$(journal_field "$dir" smuncertain receipt_file)" \
@@ -2603,6 +2632,7 @@ test_prepublication_abort_retires_replacement_wiring_and_busy_state
 test_journal_records_the_checkpoint_it_proved
 test_live_secondmate_relaunch_requires_explicit_context_custody
 test_live_secondmate_handoff_waits_for_receipt_before_retiring_copies
+test_empty_live_secondmate_handoff_refuses_before_stop
 test_unconfirmed_live_secondmate_handoff_retains_full_context
 test_live_secondmate_relaunch_requires_explicit_abandonment_choice
 test_dead_secondmate_relaunch_needs_no_context_custody
