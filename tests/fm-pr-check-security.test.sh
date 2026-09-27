@@ -3563,6 +3563,9 @@ test_relaunch_preserves_an_armed_merge_poll() {
   fm_git_worktree "$dir/project" "$dir/wt" "task-$id"
   write_task_meta "$dir" "$id"
   printf 'harness=claude\n' >> "$dir/home/state/$id.meta"
+  : > "$dir/home/config/trace-context"
+  printf '%s\n' "$$" > "$dir/home/state/.lock"
+  printf '%s on\n' "$$" > "$dir/home/state/.trace-context-effective"
   mkdir -p "$dir/home/data/$id"
   cat > "$dir/home/data/$id/brief.md" <<EOF
 # Task
@@ -3581,10 +3584,12 @@ EOF
   fm_pr_poll_artifacts_valid "$dir/home/state" "$id" "$POLL" \
     || fail "the merge poll was not validly armed before relaunch"
 
-  out=$(relaunch_run_control "$dir" "$id" relaunch --note "continue after restart"); rc=$?
+  out=$(FM_TRACE_CONTEXT=on relaunch_run_control "$dir" "$id" relaunch --note "continue after restart"); rc=$?
   expect_code 0 "$rc" "relaunch of a task with an armed merge poll should succeed"$'\n'"$out"
   grep -q '^control_relaunch_tx=' "$dir/home/state/$id.meta" \
     || fail "relaunch did not record control_relaunch_tx, so this case did not exercise the reported ordering defect"
+  grep -Eq '^traceparent=00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$' "$dir/home/state/$id.meta" \
+    || fail "relaunch did not record traceparent, so this case did not exercise trace propagation"
 
   fm_pr_poll_artifacts_valid "$dir/home/state" "$id" "$POLL" \
     || fail "relaunch broke the armed merge poll's metadata identity parse (issue #5802)"
