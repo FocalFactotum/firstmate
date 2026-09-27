@@ -4858,14 +4858,22 @@ else
   SPAWN_FRESH_COMMIT_PENDING=1
 fi
 SPAWN_META_PATH=$SPAWN_META_TMP
-preserve_relaunch_meta() {
+# fm_pr_metadata_identity_parse (bin/fm-pr-lib.sh) only tolerates pr_head= and
+# x_* lines after pr=, so those three carried-over line shapes must stay LAST
+# in the republished record - anything else this function writes after them,
+# such as control_relaunch_tx= below, would otherwise land between or after
+# them and break an armed merge poll's parse on relaunch (issue #5802).
+preserve_relaunch_meta_head() {
   awk -F= '
     BEGIN {
       split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
-    !($1 in owned)
+    !($1 in owned) && $1 != "pr" && $1 != "pr_head" && $1 !~ /^x_/
   ' "$RELAUNCH_META"
+}
+preserve_relaunch_meta_tail() {
+  awk -F= '$1 == "pr" || $1 == "pr_head" || $1 ~ /^x_/' "$RELAUNCH_META"
 }
 {
   echo "window=$META_WINDOW"
@@ -4915,10 +4923,13 @@ preserve_relaunch_meta() {
     echo "projects=$SECONDMATE_PROJECTS"
   fi
   if [ "$RELAUNCH" -eq 1 ]; then
-    preserve_relaunch_meta
+    preserve_relaunch_meta_head
   fi
   if [ "$SPAWN_CONTROL_PARENT" = 1 ] && [ -n "${FM_CONTROL_RELAUNCH_TX:-}" ]; then
     echo "control_relaunch_tx=$FM_CONTROL_RELAUNCH_TX"
+  fi
+  if [ "$RELAUNCH" -eq 1 ]; then
+    preserve_relaunch_meta_tail
   fi
 } >"$SPAWN_META_PATH" || {
   echo "error: task record for $ID could not be prepared at $SPAWN_META_PATH" >&2
@@ -5200,9 +5211,20 @@ spawn_record_traceparent() {
     acquired=1
   fi
   SPAWN_META_TMP="$STATE/.$ID.meta.trace.${BASHPID:-$$}"
+  # fm_pr_metadata_identity_parse only tolerates pr_head= and x_* lines after
+  # pr=, so an armed merge poll's carried-over pr=/pr_head=/x_* lines must stay
+  # last: insert the carrier before the first of them rather than appending it
+  # after (issue #5802's same defect shape).
   if [ ! -f "$meta" ] || [ ! -w "$meta" ] ||
-    ! awk -F= '$1 != "traceparent"' "$meta" >"$SPAWN_META_TMP" ||
-    ! printf 'traceparent=%s\n' "$SPAWN_TRACEPARENT" >>"$SPAWN_META_TMP" ||
+    ! awk -F= -v tp="$SPAWN_TRACEPARENT" '
+        $1 == "traceparent" { next }
+        !inserted && ($1 == "pr" || $1 == "pr_head" || $1 ~ /^x_/) {
+          print "traceparent=" tp
+          inserted = 1
+        }
+        { print }
+        END { if (!inserted) print "traceparent=" tp }
+      ' "$meta" >"$SPAWN_META_TMP" ||
     ! fm_backlog_atomic_transition publish "$SPAWN_META_TMP" "$meta" "task record" "$STATE"; then
     status=1
     rm -f "$SPAWN_META_TMP" 2>/dev/null || true
