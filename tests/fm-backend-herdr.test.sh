@@ -1938,6 +1938,24 @@ test_projection_journal_v2_binds_and_advances_exact_endpoint() {
   pass "herdr presentation journal: version 2 binds exact home/endpoint/parent identities and advances atomically"
 }
 
+test_projection_journal_rejects_custom_legacy_prefix() {
+  local dir state home result
+  dir="$TMP_ROOT/projection-journal-custom-legacy"; state="$dir/state"; home="$dir/home"
+  mkdir -p "$state" "$home"
+  result=$(bash -c '
+    . "$0/bin/backends/herdr.sh"
+    token=$(fm_backend_herdr_projection_journal_create "$1" custom-r1) || exit 1
+    journal="$1/custom-r1.herdr-presentation"
+    fm_backend_herdr_projection_journal_bind \
+      "$journal" custom-r1 "$2" fmtest wchild wchild:t1 wchild:p1 wparent REVIEW \
+      "REVIEW/custom-r1 · p:$token" fm-custom-r1 || exit 1
+    if fm_backend_herdr_projection_journal_snapshot "$journal" custom-r1; then exit 2; fi
+    fm_backend_herdr_projection_owned_children "$1" "$2" fmtest wparent
+  ' "$ROOT" "$state" "$home") || fail "custom-prefix legacy journal was accepted"
+  [ "$result" = '[]' ] || fail "custom-prefix legacy journal granted child ownership: $result"
+  pass "herdr presentation journal: arbitrary custom legacy prefixes grant no ownership"
+}
+
 test_projection_create_uses_exact_response_ids_and_leaves_one_task_pane() {
   local dir state log resp fb out token journal
   dir="$TMP_ROOT/projection-create"; state="$dir/state"; mkdir -p "$dir/responses" "$state"
@@ -3203,6 +3221,51 @@ SH
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_projection_live_binding_matches fmtest ZyXwVuTsRqPoNmLkJiHgFe wnew wnew:t1 wnew:p1 w1 FIRSTMATE "$1" fm-new-r1 "$2" "$3"' "$ROOT" "$new_label" "$state" "$home" \
     || fail "publication refused the journaled legacy child under the renamed parent"
   pass "herdr presentation: renamed parent orders and binds after its journaled legacy child"
+}
+
+test_projection_order_traverses_journaled_custom_parent() {
+  local dir state home log resp fb mover mover_log out token review_label layout
+  dir="$TMP_ROOT/projection-order-custom-following-parent"; state="$dir/state"; home="$dir/home"
+  mkdir -p "$dir/responses" "$state" "$home"
+  log="$dir/log"; resp="$dir/responses"; mover="$dir/mover"; mover_log="$dir/mover.log"
+  : > "$log"; : > "$mover_log"
+  token=$(bash -c '
+    . "$0/bin/backends/herdr.sh"
+    token=$(fm_backend_herdr_projection_journal_create "$1" review-r1) || exit 1
+    label=$(fm_backend_herdr_projection_workspace_label review-r1 "$token")
+    fm_backend_herdr_projection_journal_bind \
+      "$1/review-r1.herdr-presentation" review-r1 "$2" fmtest \
+      wreview-child wreview-child:t1 wreview-child:p1 wreview REVIEW "$label" fm-review-r1 || exit 1
+    printf "%s" "$token"
+  ' "$ROOT" "$state" "$home") || fail "could not bind the other custom parent's child"
+  review_label="└ review-r1 · p:$token"
+  layout="{\"result\":{\"workspaces\":[{\"workspace_id\":\"wlauncher\",\"label\":\"FIRSTMATE\"},{\"workspace_id\":\"wreview\",\"label\":\"REVIEW\"},{\"workspace_id\":\"wreview-child\",\"label\":\"$review_label\"},{\"workspace_id\":\"wnew\",\"label\":\"└ new · p:ZyXwVuTsRqPoNmLkJiHgFe\"}]}}"
+  printf '%s\n' "$layout" > "$resp/1.out"
+  printf '%s\n' '{"client":{"version":"0.7.4","protocol":16},"server":{"running":true}}' > "$resp/2.out"
+  printf '%s\n' '{"schemas":{"request":{"oneOf":[{"properties":{"method":{"const":"workspace.move"}}}],"$defs":{"WorkspaceMoveParams":{"required":["workspace_id","insert_index"],"properties":{"insert_index":{"type":"integer"}}}}}}}' > "$resp/3.out"
+  printf '%s\n' '{"sessions":[{"name":"fmtest","running":true,"socket_path":"/tmp/fmtest.sock"}]}' > "$resp/4.out"
+  cat > "$mover" <<SH
+#!/usr/bin/env bash
+printf '%s\\t%s\\t%s\\n' "\$1" "\$2" "\$3" >> "\$FM_FAKE_MOVER_LOG"
+printf '%s\\n' '{"id":"fm-workspace-move","result":{"type":"workspace_list","workspaces":[{"workspace_id":"wlauncher","label":"FIRSTMATE"},{"workspace_id":"wnew","label":"└ new · p:ZyXwVuTsRqPoNmLkJiHgFe"},{"workspace_id":"wreview","label":"REVIEW"},{"workspace_id":"wreview-child","label":"$review_label"}]}}'
+SH
+  chmod +x "$mover"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$(PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_HERDR_SCRIPT_STATUS=1 \
+    FM_BACKEND_HERDR_WORKSPACE_MOVER="$mover" FM_FAKE_MOVER_LOG="$mover_log" \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_projection_focus_snapshot() { printf "wreview\\twreview:t1"; }; fm_backend_herdr_projection_focus_restore() { return 0; }; fm_backend_herdr_projection_order_best_effort fmtest wnew FIRSTMATE wlauncher "$1" "$2"' "$ROOT" "$state" "$home" 2>&1)
+  [ -z "$out" ] || fail "journaled custom parent blocked ordering: $out"
+  [ "$(cat "$mover_log")" = "$(cd /tmp && pwd -P)/fmtest.sock"$'\t'"wnew"$'\t'"1" ] \
+    || fail "journaled custom parent did not preserve its own child block"
+
+  rm -f "$state/review-r1.herdr-presentation" "$resp/.count"
+  : > "$mover_log"
+  out=$(PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_HERDR_SCRIPT_STATUS=1 \
+    FM_BACKEND_HERDR_WORKSPACE_MOVER="$mover" FM_FAKE_MOVER_LOG="$mover_log" \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_projection_order_best_effort fmtest wnew FIRSTMATE wlauncher "$1" "$2"' "$ROOT" "$state" "$home" 2>&1)
+  assert_contains "$out" "ambiguous workspace layout" "unjournaled custom child was accepted"
+  [ ! -s "$mover_log" ] || fail "unjournaled custom child triggered a workspace move"
+  pass "herdr presentation ordering: another custom parent requires its own journaled child"
 }
 
 test_projection_order_allows_intervening_parent_child_block() {
@@ -5940,6 +6003,7 @@ test_release_floor_verdict_survives_losing_either_signal
 test_presentation_preference_reports_three_distinct_states
 test_projection_journal_is_atomic_and_uses_128_bit_token
 test_projection_journal_v2_binds_and_advances_exact_endpoint
+test_projection_journal_rejects_custom_legacy_prefix
 test_projection_create_uses_exact_response_ids_and_leaves_one_task_pane
 test_projection_create_never_closes_a_concurrent_same_label_tab
 test_projection_focus_snapshot_requires_exact_workspace_and_tab
@@ -5977,6 +6041,7 @@ test_projection_order_moves_only_exact_new_workspace_and_preserves_relative_orde
 test_projection_order_secondmate_parent_block
 test_projection_order_foreign_legacy_child_is_read_only
 test_projection_order_renamed_parent_with_journaled_legacy_child
+test_projection_order_traverses_journaled_custom_parent
 test_projection_order_allows_intervening_parent_child_block
 test_projection_order_human_spaces_never_move_targets
 test_projection_order_failure_warns_without_cleanup_or_spawn_failure
