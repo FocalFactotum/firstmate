@@ -1930,6 +1930,12 @@ test_projection_journal_v2_binds_and_advances_exact_endpoint() {
     || fail "version 2 projection journal did not advance the exact replacement endpoint: $out"
   [ "$(wc -l < "$state/fm-hibit-r1.herdr-presentation" | tr -d '[:space:]')" = 12 ] \
     || fail "version 2 projection journal must have exactly 12 fields"
+  { sed -n '12p' "$state/fm-hibit-r1.herdr-presentation"; sed -n '1,11p' "$state/fm-hibit-r1.herdr-presentation"; } \
+    > "$state/reordered-journal"
+  mv "$state/reordered-journal" "$state/fm-hibit-r1.herdr-presentation"
+  bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_projection_journal_snapshot "$1" fm-hibit-r1' \
+    "$ROOT" "$state/fm-hibit-r1.herdr-presentation" \
+    || fail "version 2 journal field order changed its meaning"
   printf 'pane_id=duplicate\n' >> "$state/fm-hibit-r1.herdr-presentation"
   if bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_projection_journal_snapshot "$1" fm-hibit-r1' \
     "$ROOT" "$state/fm-hibit-r1.herdr-presentation"; then
