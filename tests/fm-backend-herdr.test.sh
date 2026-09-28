@@ -3205,6 +3205,7 @@ test_projection_order_renamed_parent_with_journaled_legacy_child() {
   new_label='└ new-r1 · p:ZyXwVuTsRqPoNmLkJiHgFe'
   printf '%s\n' "{\"result\":{\"workspaces\":[{\"workspace_id\":\"w1\",\"label\":\"FIRSTMATE\"},{\"workspace_id\":\"wlegacy\",\"label\":\"$legacy_label\"},{\"workspace_id\":\"wother\",\"label\":\"human\"},{\"workspace_id\":\"wnew\",\"label\":\"$new_label\"}]}}" > "$resp/1.out"
   printf '%s\n' '{"client":{"version":"0.7.4","protocol":16},"server":{"running":true}}' > "$resp/2.out"
+  # shellcheck disable=SC2016 # $defs is a literal JSON Schema key.
   printf '%s\n' '{"schemas":{"request":{"oneOf":[{"properties":{"method":{"const":"workspace.move"}}}],"$defs":{"WorkspaceMoveParams":{"required":["workspace_id","insert_index"],"properties":{"insert_index":{"type":"integer"}}}}}}}' > "$resp/3.out"
   printf '%s\n' '{"sessions":[{"name":"fmtest","running":true,"socket_path":"/tmp/fmtest.sock"}]}' > "$resp/4.out"
   cat > "$mover" <<SH
@@ -3248,6 +3249,7 @@ test_projection_order_traverses_journaled_custom_parent() {
   layout="{\"result\":{\"workspaces\":[{\"workspace_id\":\"wlauncher\",\"label\":\"FIRSTMATE\"},{\"workspace_id\":\"wreview\",\"label\":\"REVIEW\"},{\"workspace_id\":\"wreview-child\",\"label\":\"$review_label\"},{\"workspace_id\":\"wnew\",\"label\":\"└ new · p:ZyXwVuTsRqPoNmLkJiHgFe\"}]}}"
   printf '%s\n' "$layout" > "$resp/1.out"
   printf '%s\n' '{"client":{"version":"0.7.4","protocol":16},"server":{"running":true}}' > "$resp/2.out"
+  # shellcheck disable=SC2016 # $defs is a literal JSON Schema key.
   printf '%s\n' '{"schemas":{"request":{"oneOf":[{"properties":{"method":{"const":"workspace.move"}}}],"$defs":{"WorkspaceMoveParams":{"required":["workspace_id","insert_index"],"properties":{"insert_index":{"type":"integer"}}}}}}}' > "$resp/3.out"
   printf '%s\n' '{"sessions":[{"name":"fmtest","running":true,"socket_path":"/tmp/fmtest.sock"}]}' > "$resp/4.out"
   cat > "$mover" <<SH

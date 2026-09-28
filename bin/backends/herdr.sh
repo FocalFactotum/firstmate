@@ -611,7 +611,7 @@ fm_backend_herdr_projection_journal_create() {  # <state-dir> <task-id>
 # journal or a version 2 exact projection binding without sourcing shell code.
 # Version 2 sets FM_BACKEND_HERDR_JOURNAL_* globals for same-process callers.
 fm_backend_herdr_projection_journal_snapshot() {  # <journal> <task-id>
-  local journal=$1 id=$2 lines=0 line= key value seen='|' expected_label expected_legacy_label expected_task_label exact
+  local journal=$1 id=$2 lines=0 line='' key value seen='|' expected_label expected_legacy_label expected_task_label exact
   FM_BACKEND_HERDR_JOURNAL_VERSION=""
   FM_BACKEND_HERDR_JOURNAL_TASK_ID=""
   FM_BACKEND_HERDR_JOURNAL_PROJECTION_ID=""
@@ -712,11 +712,15 @@ fm_backend_herdr_projection_owned_children() {  # <state> <home> <session> <pare
     id=${journal##*/}
     id=${id%"$FM_BACKEND_HERDR_PRESENTATION_JOURNAL_SUFFIX"}
     fm_backend_herdr_projection_journal_snapshot "$journal" "$id" || continue
-    [ "$FM_BACKEND_HERDR_JOURNAL_VERSION" = 2 ] \
-      && [ "$FM_BACKEND_HERDR_JOURNAL_HOME" = "$home" ] \
-      && [ "$FM_BACKEND_HERDR_JOURNAL_SESSION" = "$session" ] \
-      && { [ -z "$parent_workspace" ] \
-        || [ "$FM_BACKEND_HERDR_JOURNAL_PARENT_WORKSPACE_ID" = "$parent_workspace" ]; } || continue
+    if [ "$FM_BACKEND_HERDR_JOURNAL_VERSION" != 2 ] \
+      || [ "$FM_BACKEND_HERDR_JOURNAL_HOME" != "$home" ] \
+      || [ "$FM_BACKEND_HERDR_JOURNAL_SESSION" != "$session" ]; then
+      continue
+    fi
+    if [ -n "$parent_workspace" ] \
+      && [ "$FM_BACKEND_HERDR_JOURNAL_PARENT_WORKSPACE_ID" != "$parent_workspace" ]; then
+      continue
+    fi
     records+="$FM_BACKEND_HERDR_JOURNAL_WORKSPACE_ID"$'\t'"$FM_BACKEND_HERDR_JOURNAL_PROJECTION_ID"$'\t'"$FM_BACKEND_HERDR_JOURNAL_PARENT_WORKSPACE_ID"$'\n'
   done
   printf '%s' "$records" | jq -Rn '[inputs | split("\t") | {workspace_id: .[0], token: .[1], parent_workspace_id: .[2]}]'
