@@ -287,8 +287,10 @@ Projected children are placed in one contiguous block immediately after their ow
 - `python3`.
 - The machine-private per-session lock.
 
-Existing legacy child labels may extend an already adjacent block read-only but are never renamed or migrated.
-A foreign, ambiguous, detached, or manually interleaved child makes ordering skip with a warning rather than rewriting the layout.
+An adjacent child extends a parent's block only when this home's version 2 journal matches the session, exact parent and child workspace ids, and the child's visible label token.
+The journal reader accepts current `└` labels and historical `firstmate/<task>` or `2ndmate-<id>/<task>` labels; the live child may retain its old prefix after its parent is renamed.
+A journaled child also identifies a custom-labeled top-level parent when ordering past that parent's block.
+Legacy children are never renamed or migrated, and an unjournaled, ambiguous, detached, or manually interleaved child makes ordering skip with a warning rather than rewriting the layout.
 
 Ordering failure never fails the task spawn.
 Firstmate does not retry, adopt, reuse, close, delete, or rename anything in response to an unavailable method, lock contention, ambiguous socket, lost response, failed move, or verification mismatch.
