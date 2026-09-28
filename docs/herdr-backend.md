@@ -256,7 +256,8 @@ Creation proceeds in this order:
    A launcher workspace may carry a custom label different from the computed home label; its verified id still owns the projection.
 
 Another parent with the same presentation label does not prevent publication or participate in restart reclaim.
-Reclaim checks the recorded parent id and its observed label against the live topology, not against the current computed home label.
+Reclaim checks the recorded exact parent id against the live topology.
+The recorded parent label describes its appearance when the binding was published and may differ from its current label.
 
 The token is visible in the workspace title, because Herdr exposes no verified hidden persistent field.
 Neither token, title, nor journal authorizes send, capture, task ownership, Treehouse return, or general recovery.
@@ -374,7 +375,7 @@ The replacement is allowed only when all of these agree:
 - The session.
 - The metadata endpoint.
 - The unique token match.
-- The workspace shape and labels.
+- The projected workspace shape and labels.
 - The parent identity and placement.
 - The non-target focus snapshot.
 
@@ -388,7 +389,7 @@ These cases fall back flat without mutating the old projection when duplicate-ag
 - Version 1 journals.
 - Dead or missing panes.
 - Duplicate or absent tokens.
-- Renamed or detached spaces.
+- Renamed or detached projection workspaces.
 - Cross-home mismatches.
 - Inconsistent endpoint bindings.
 - Active target tabs.
