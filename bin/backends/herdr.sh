@@ -1533,10 +1533,12 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
       then .workspace_id == $parent_ws
       else (.label | type) == "string" and .label == $parent
       end;
+    def is_conventional_parent:
+      (.label | type) == "string"
+      and ((.label == "firstmate") or (.label | test("^2ndmate-[^/]+$")));
     def is_top_level_parent:
       .workspace_id as $id
-      | ((.label | type) == "string"
-        and ((.label == "firstmate") or (.label | test("^2ndmate-[^/]+$"))))
+      | is_conventional_parent
         or (($strict | length) > 0 and any($owned[]; .parent_workspace_id == $id));
     def is_new_child:
       (.label | type) == "string"
@@ -1588,7 +1590,11 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
           | if $owner == null then
               .valid = false
             elif ($strict | length) > 0 then
-              if ($spaces[$i] | is_owned_child_for($owner)) then . else .valid = false end
+              if ($spaces[$i] | is_owned_child_for($owner)) then .
+              elif $owner != $parent_ws and any($spaces[];
+                .workspace_id == $owner and is_conventional_parent
+                and (.label as $owner_label | $spaces[$i] | is_new_child or is_legacy_child_for($owner_label))) then .
+              else .valid = false end
             elif ($spaces[$i] | is_new_child or is_legacy_child_for($owner)) then
               .
             else
