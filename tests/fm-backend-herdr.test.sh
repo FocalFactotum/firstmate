@@ -3171,7 +3171,7 @@ test_projection_order_renamed_parent_with_journaled_legacy_child() {
   token=$(bash -c '
     . "$0/bin/backends/herdr.sh"
     token=$(fm_backend_herdr_projection_journal_create "$1" legacy-r1) || exit 1
-    label=$(fm_backend_herdr_projection_workspace_label legacy-r1 "$token")
+    label="firstmate/legacy-r1 · p:$token"
     fm_backend_herdr_projection_journal_bind \
       "$1/legacy-r1.herdr-presentation" legacy-r1 "$2" fmtest \
       wlegacy wlegacy:t1 wlegacy:p1 w1 firstmate "$label" fm-legacy-r1 || exit 1
@@ -3612,7 +3612,7 @@ test_projection_reclaim_replaces_only_exact_husk_and_advances_binding() {
   legacy_token=$(bash -c '
     . "$0/bin/backends/herdr.sh"
     token=$(fm_backend_herdr_projection_journal_create "$1" legacy-r1) || exit 1
-    label=$(fm_backend_herdr_projection_workspace_label legacy-r1 "$token")
+    label="firstmate/legacy-r1 · p:$token"
     fm_backend_herdr_projection_journal_bind \
       "$1/legacy-r1.herdr-presentation" legacy-r1 "$2" fmtest \
       wlegacy wlegacy:t1 wlegacy:p1 w1 firstmate "$label" fm-legacy-r1 || exit 1

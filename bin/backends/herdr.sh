@@ -618,7 +618,7 @@ fm_backend_herdr_projection_journal_field() {  # <journal> <key>
 # journal or a version 2 exact projection binding without sourcing shell code.
 # Version 2 sets FM_BACKEND_HERDR_JOURNAL_* globals for same-process callers.
 fm_backend_herdr_projection_journal_snapshot() {  # <journal> <task-id>
-  local journal=$1 id=$2 lines expected_label expected_task_label exact
+  local journal=$1 id=$2 lines expected_label expected_legacy_label expected_task_label exact
   FM_BACKEND_HERDR_JOURNAL_VERSION=""
   FM_BACKEND_HERDR_JOURNAL_TASK_ID=""
   FM_BACKEND_HERDR_JOURNAL_PROJECTION_ID=""
@@ -673,8 +673,10 @@ fm_backend_herdr_projection_journal_snapshot() {  # <journal> <task-id>
     && [ -n "$FM_BACKEND_HERDR_JOURNAL_WORKSPACE_LABEL" ] \
     && [ -n "$FM_BACKEND_HERDR_JOURNAL_TASK_LABEL" ] || return 1
   expected_label=$(fm_backend_herdr_projection_workspace_label "$id" "$FM_BACKEND_HERDR_JOURNAL_PROJECTION_ID")
+  expected_legacy_label="$FM_BACKEND_HERDR_JOURNAL_PARENT_LABEL/$id · p:$FM_BACKEND_HERDR_JOURNAL_PROJECTION_ID"
   expected_task_label="fm-$id"
-  [ "$FM_BACKEND_HERDR_JOURNAL_WORKSPACE_LABEL" = "$expected_label" ] \
+  { [ "$FM_BACKEND_HERDR_JOURNAL_WORKSPACE_LABEL" = "$expected_label" ] \
+    || [ "$FM_BACKEND_HERDR_JOURNAL_WORKSPACE_LABEL" = "$expected_legacy_label" ]; } \
     && [ "$FM_BACKEND_HERDR_JOURNAL_TASK_LABEL" = "$expected_task_label" ]
 }
 
