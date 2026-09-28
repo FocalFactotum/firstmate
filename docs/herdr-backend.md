@@ -252,9 +252,11 @@ Creation proceeds in this order:
 
 1. Firstmate atomically publishes a three-field version 1 journal containing a random 128-bit base64url token, before asking Herdr to create anything.
 2. After the new workspace converges to one exact task endpoint beneath one exact parent workspace id, the journal advances to a version 2 binding.
-   That binding records the physical home, named session, endpoint, parent, and immutable expected labels.
+   That binding records the physical home, named session, exact endpoint and parent ids, the observed label of that exact parent, and the expected task labels.
+   A launcher workspace may carry a custom label different from the computed home label; its verified id still owns the projection.
 
 Another parent with the same presentation label does not prevent publication or participate in restart reclaim.
+Reclaim checks the recorded parent id and its observed label against the live topology, not against the current computed home label.
 
 The token is visible in the workspace title, because Herdr exposes no verified hidden persistent field.
 Neither token, title, nor journal authorizes send, capture, task ownership, Treehouse return, or general recovery.

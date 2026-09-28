@@ -198,7 +198,7 @@ Verify the worker is placed in the correct workspace.
 EOF
 }
 
-for id in uniqA uniqB dupC dupD staleF smE presU presD; do
+for id in uniqA uniqB dupC dupD staleF smE presU presD presC; do
   mkdir -p "$PRIMARY_HOME/data/$id" "$SM_HOME/data/$id" "$PRES_HOME/data/$id"
   write_ship_brief "$PRIMARY_HOME/data/$id/brief.md" "$id"
   write_ship_brief "$SM_HOME/data/$id/brief.md" "$id"
@@ -279,6 +279,33 @@ PRESU_JOURNAL="$PRES_HOME/state/presU.herdr-presentation"
   || fail "the projection journal does not name its own workspace"
 [ "$(focused_workspace)" = "$WS_OTHER" ] || fail "a projected spawn stole focus from the captain's workspace"
 pass "real herdr E2E: presentation spaces still create the isolated child workspace and bind it under the launcher's exact parent, without stealing focus"
+
+# --- 2c. custom launcher label still publishes a binding for its exact id --
+
+read -r WS_CUSTOM _ LAUNCH_CUSTOM_PANE <<EOF
+$(make_workspace FIRSTMATE)
+EOF
+[ -n "$WS_CUSTOM" ] && [ -n "$LAUNCH_CUSTOM_PANE" ] \
+  || fail "could not create the custom-labeled launcher workspace"
+spawn_from_launcher "$LAUNCH_CUSTOM_PANE" "$PRES_HOME" presC "$PROJ" --mode no-mistakes --yolo off
+[ "$SPAWN_RC" -eq 0 ] || fail "custom-labeled launcher spawn failed"$'\n'"$(cat "$SPAWN_ERR")"
+PRESC_JOURNAL="$PRES_HOME/state/presC.herdr-presentation"
+[ "$(journal_field "$PRESC_JOURNAL" version)" = 2 ] \
+  || fail "custom-labeled launcher did not publish an exact binding"$'\n'"$(cat "$SPAWN_ERR")"
+[ "$(journal_field "$PRESC_JOURNAL" parent_workspace_id)" = "$WS_CUSTOM" ] \
+  || fail "custom-labeled launcher bound a different parent"
+[ "$(journal_field "$PRESC_JOURNAL" parent_label)" = FIRSTMATE ] \
+  || fail "binding did not preserve the observed custom parent label"
+PRESC_WS=$(journal_field "$PRESC_JOURNAL" workspace_id)
+FM_GATE_REFUSE_BYPASS=1 FM_HOME="$PRES_HOME" FM_ROOT_OVERRIDE="$ROOT" \
+  FM_STATE_OVERRIDE="$PRES_HOME/state" FM_DATA_OVERRIDE="$PRES_HOME/data" \
+  FM_CONFIG_OVERRIDE="$PRES_HOME/config" "$ROOT/bin/fm-teardown.sh" presC --force \
+  >"$TMP_ROOT/presC-teardown.out" 2>"$TMP_ROOT/presC-teardown.err" \
+  || fail "custom-labeled launcher teardown failed: $(cat "$TMP_ROOT/presC-teardown.err")"
+[ ! -e "$PRESC_JOURNAL" ] || fail "custom-labeled launcher teardown kept the presentation journal"
+[ -z "$(label_of_workspace "$PRESC_WS")" ] || fail "custom-labeled launcher teardown kept the projected workspace"
+[ "$(label_of_workspace "$WS_CUSTOM")" = FIRSTMATE ] || fail "custom-labeled launcher teardown changed the parent"
+pass "real herdr E2E: a custom-labeled exact launcher publishes a binding and retires its projected workspace cleanly"
 
 # --- 3. duplicate label, launcher in the NON-first match, driven from a real
 #        Herdr pane so the identity comes from Herdr's own injection ----------
