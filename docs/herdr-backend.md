@@ -279,7 +279,7 @@ An ambiguous response grants no mutation or cleanup authority.
 Protocol 16 exposes `workspace.move` over the named session socket but no CLI subcommand.
 `bin/backends/herdr-workspace-move.py` sends only that whitelisted method and verifies the complete returned workspace order.
 
-Projected children are placed in one contiguous block immediately after their owning home when all of these are verifiable:
+Projected children are placed in one contiguous block immediately after their exact owning parent workspace when all of these are verifiable:
 
 - The session layout.
 - The protocol.
@@ -289,10 +289,11 @@ Projected children are placed in one contiguous block immediately after their ow
 
 An adjacent current-format `└` child with a unique workspace id and visible token extends the exact launcher's block as read-only layout evidence, allowing multiple homes to project beneath the same launcher without reading another home's journals.
 That evidence grants no ownership or mutation authority over the sibling; reclaim and cleanup still require the target task's own exact home, session, workspace, tab, and pane binding.
-A historical child extends the block only when this home's version 2 journal matches the session, exact parent and child workspace ids, and the child's visible label token.
+A historical child extends the launcher's block only when this home's version 2 journal matches the session, exact parent and child workspace ids, and the child's visible label token.
 The journal reader accepts current `└` labels and historical `firstmate/<task>` or `2ndmate-<id>/<task>` labels; the live child may retain its old prefix after its parent is renamed.
 A journaled child also identifies a custom-labeled top-level parent when ordering past that parent's block.
-Legacy children are never renamed or migrated, and an unjournaled legacy child, ambiguous token, detached child, or manually interleaved child makes ordering skip with a warning rather than rewriting the layout.
+Legacy children are never renamed or migrated, and an unjournaled legacy child in the launcher's block, ambiguous token, detached child, or manually interleaved child makes ordering skip with a warning rather than rewriting the layout.
+Ordering may traverse another conventional parent's adjacent current-format or matching-prefix historical children as read-only layout evidence without consulting that home's journals.
 
 Ordering failure never fails the task spawn.
 Firstmate does not retry, adopt, reuse, close, delete, or rename anything in response to an unavailable method, lock contention, ambiguous socket, lost response, failed move, or verification mismatch.

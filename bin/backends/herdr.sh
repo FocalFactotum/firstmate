@@ -1492,13 +1492,12 @@ fm_backend_herdr_pane_idle_shell_sample() {  # <session> <pane-id>
 # returned by THIS projected create immediately after its owning parent's
 # contiguous child block and before the next parent.
 #
-# <parent-label> is the owning FM_HOME label (firstmate or 2ndmate-<id>).
-# Optional <parent-workspace-id> is that parent's EXACT id, which the caller
-# already resolved from the launching agent's own herdr identity. When given it
-# anchors the owning parent by id, so two workspaces sharing the home label no
-# longer make the whole layout ambiguous; when omitted the parent is located by
-# label exactly as before. With a unique label the two select the same
-# workspace, so ordering behavior is unchanged in the ordinary case.
+# <parent-label> is the observed label of the already resolved parent, which
+# may differ from this home's computed label. Optional <parent-workspace-id>
+# anchors that exact parent regardless of label collisions; when omitted the
+# parent is located by a unique label. Production callers supply <state> and
+# <home> for home-local journal correlation; docs/herdr-backend.md "Ordering"
+# owns the sibling-evidence policy.
 #
 # This is presentation-only and always returns success.
 # Every unavailable, ambiguous, failed, or unverifiable ordering step prints a
