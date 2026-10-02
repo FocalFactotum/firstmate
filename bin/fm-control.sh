@@ -6,7 +6,7 @@
 #        fm-control.sh <task-id> exit
 #        fm-control.sh <task-id> relaunch [--harness <name>] [--model <name>]
 #                                         [--effort <level>]
-#                                         (--note <text> | --note-file <path>)
+#                                         [--note <text> | --note-file <path>]
 #                                         [--handoff-file <path> --handoff-sha256 <hex>
 #                                          | --abandon-live-context]
 #
@@ -84,11 +84,12 @@
 #              standing charter is never rewritten. A live secondmate also
 #              requires either an integrity-bound --handoff-file plus its
 #              --handoff-sha256, or the explicit --abandon-live-context choice.
-#              A supplied handoff is delivered in a replacement-only brief, and
-#              the old and delivered copies remain until the replacement writes
-#              a transaction-bound receipt after reading it and being ready to
-#              resume. Dead or proven-missing agents need no context custody.
-#              Context abandonment requires current explicit captain authority.
+#              --handoff-file must be an absolute path to a nonempty, readable,
+#              single-link regular file, not a symlink, without NUL bytes.
+#              --handoff-sha256 must match it and contain exactly 64 lowercase
+#              hexadecimal characters. Custody options apply only to secondmates.
+#              docs/agent-control.md "Live secondmate context custody" owns the
+#              delivery, receipt, retention, and abandonment contract.
 #              Records a durable checkpoint and that note, exits the old agent,
 #              then delegates the launch to its single owner,
 #              bin/fm-spawn.sh --relaunch. A failure before publication keeps
@@ -1011,7 +1012,7 @@ relaunch_rollback() {
       if [ -n "$RELAUNCH_BRIEF" ] && [ -f "$BRIEF_PRIOR" ]; then
         cp -p "$BRIEF_PRIOR" "$RELAUNCH_BRIEF" 2>/dev/null || true
       fi
-      journal_write "failed:$RELAUNCH_PHASE" "${CUSTODY_LINES[@]}" "rollback=instructions-restored" || true
+      journal_write "failed:$RELAUNCH_PHASE" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "rollback=instructions-restored" || true
       echo "error: relaunch of $ID was refused before its agent was touched; nothing changed" >&2
       ;;
     stopping)
@@ -1021,11 +1022,11 @@ relaunch_rollback() {
           if [ -n "$RELAUNCH_BRIEF" ] && [ -f "$BRIEF_PRIOR" ]; then
             cp -p "$BRIEF_PRIOR" "$RELAUNCH_BRIEF" 2>/dev/null || true
           fi
-          journal_write "failed:$RELAUNCH_PHASE" "${CUSTODY_LINES[@]}" "rollback=instructions-restored-agent-alive" || true
+          journal_write "failed:$RELAUNCH_PHASE" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "rollback=instructions-restored-agent-alive" || true
           echo "error: relaunch of $ID failed while stopping the old agent, which is still running; its original instructions were restored" >&2
           ;;
         dead)
-          journal_write "failed:$RELAUNCH_PHASE" "${CUSTODY_LINES[@]}" "rollback=prior-record-kept-agent-dead" || true
+          journal_write "failed:$RELAUNCH_PHASE" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "rollback=prior-record-kept-agent-dead" || true
           echo "error: $ID's agent stopped but relaunch did not reach replacement launch; no agent is running, and its work plus progress note are preserved at $WT" >&2
           ;;
         *)
@@ -1037,27 +1038,27 @@ relaunch_rollback() {
           if [ -n "$RELAUNCH_BRIEF" ] && [ -f "$BRIEF_PRIOR" ]; then
             cp -p "$BRIEF_PRIOR" "$RELAUNCH_BRIEF" 2>/dev/null || true
           fi
-          journal_write "failed:$RELAUNCH_PHASE" "${CUSTODY_LINES[@]}" "rollback=instructions-restored-agent-state-$state" || true
+          journal_write "failed:$RELAUNCH_PHASE" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "rollback=instructions-restored-agent-state-$state" || true
           echo "error: relaunch of $ID failed while stopping the old agent and its state is '$state', so it was not proven stopped; its original instructions were restored and the durable record was retained for recovery" >&2
           ;;
       esac
       ;;
     receiving)
       if [ "$CONTEXT_CUSTODY" = receipt-confirmed ]; then
-        journal_write failed:retiring "${CUSTODY_LINES[@]}" "rollback=none-receipt-confirmed-copy-retirement-incomplete" || true
+        journal_write failed:retiring ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "rollback=none-receipt-confirmed-copy-retirement-incomplete" || true
         echo "error: $ID's replacement confirmed safe resumption, but the redundant full context copies could not all be retired; any remaining copy is preserved for recovery" >&2
       else
-        journal_write "failed:$RELAUNCH_PHASE" "${CUSTODY_LINES[@]}" "rollback=none-context-receipt-unconfirmed" || true
+        journal_write "failed:$RELAUNCH_PHASE" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "rollback=none-context-receipt-unconfirmed" || true
         echo "error: $ID's replacement is running on $TARGET_HARNESS, but context receipt and safe resumption were not confirmed; the raw handoff and full delivery copy were retained" >&2
       fi
       ;;
     retiring)
-      journal_write "failed:$RELAUNCH_PHASE" "${CUSTODY_LINES[@]}" "rollback=none-receipt-confirmed-copy-retirement-incomplete" || true
+      journal_write "failed:$RELAUNCH_PHASE" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "rollback=none-receipt-confirmed-copy-retirement-incomplete" || true
       echo "error: $ID's replacement confirmed safe resumption, but the redundant full context copies could not all be retired; any remaining copy is preserved for recovery" >&2
       ;;
     exited|launching)
       if [ "$RELAUNCH_AGENT_CONFIRMED" = 1 ]; then
-        journal_write "failed:$RELAUNCH_PHASE" "${CUSTODY_LINES[@]}" "rollback=none-new-agent-confirmed" || true
+        journal_write "failed:$RELAUNCH_PHASE" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "rollback=none-new-agent-confirmed" || true
         echo "error: $ID's replacement is running on $TARGET_HARNESS, but transaction completion could not be persisted; its published record was retained for reconciliation" >&2
       elif [ "$RELAUNCH_META_PUBLISHED" = 1 ] \
          || { [ -n "$RELAUNCH_TX" ] \
@@ -1067,10 +1068,10 @@ relaunch_rollback() {
         # harness with no agent confirmed, which is exactly what recovery
         # reconciles. Rewriting it back to the old harness would be a second,
         # worse inaccuracy.
-        journal_write "failed:$RELAUNCH_PHASE" "${CUSTODY_LINES[@]}" "rollback=none-new-record-kept" || true
+        journal_write "failed:$RELAUNCH_PHASE" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "rollback=none-new-record-kept" || true
         echo "error: $ID was relaunched on $TARGET_HARNESS but no running agent could be confirmed; its work is preserved at $WT" >&2
       else
-        journal_write "failed:$RELAUNCH_PHASE" "${CUSTODY_LINES[@]}" "rollback=prior-record-kept" || true
+        journal_write "failed:$RELAUNCH_PHASE" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "rollback=prior-record-kept" || true
         echo "error: $ID's agent was stopped but the replacement did not launch; no agent is running, and its work plus the recorded progress note are preserved at $WT" >&2
       fi
       ;;
@@ -1299,18 +1300,18 @@ do_relaunch() {
   prepare_secondmate_context_custody
   cp -p "$META" "$META_PRIOR" || die "could not preserve task $ID's durable record before relaunching"
   RELAUNCH_ACTIVE=1
-  journal_write checkpoint "${CHECKPOINT_LINES[@]}" "$note_line" "${CUSTODY_LINES[@]}"
+  journal_write checkpoint "${CHECKPOINT_LINES[@]}" "$note_line" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"}
 
   record_note
-  journal_write noted "${CHECKPOINT_LINES[@]}" "$note_line" "${CUSTODY_LINES[@]}"
+  journal_write noted "${CHECKPOINT_LINES[@]}" "$note_line" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"}
 
-  journal_write stopping "${CHECKPOINT_LINES[@]}" "$note_line" "${CUSTODY_LINES[@]}"
+  journal_write stopping "${CHECKPOINT_LINES[@]}" "$note_line" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"}
   exit_result=$(do_exit)
-  journal_write exited "${CHECKPOINT_LINES[@]}" "$note_line" "${CUSTODY_LINES[@]}" "exit_result=$exit_result"
+  journal_write exited "${CHECKPOINT_LINES[@]}" "$note_line" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "exit_result=$exit_result"
 
   # The launch owner (fm-spawn --relaunch) clears the previous incarnation's
   # per-task harness wiring before arming the new one, so nothing to do here.
-  journal_write launching "${CHECKPOINT_LINES[@]}" "$note_line" "${CUSTODY_LINES[@]}" "relaunch_tx=$RELAUNCH_TX"
+  journal_write launching "${CHECKPOINT_LINES[@]}" "$note_line" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "relaunch_tx=$RELAUNCH_TX"
   spawn_args=("$ID" --relaunch --harness "$TARGET_HARNESS")
   [ "$TARGET_MODEL" = default ] || spawn_args+=(--model "$TARGET_MODEL")
   [ "$TARGET_EFFORT" = default ] || spawn_args+=(--effort "$TARGET_EFFORT")
@@ -1348,7 +1349,7 @@ do_relaunch() {
   RELAUNCH_AGENT_CONFIRMED=1
 
   if [ "$CONTEXT_CUSTODY" = handoff-awaiting-receipt ]; then
-    journal_write receiving "${CHECKPOINT_LINES[@]}" "$note_line" "${CUSTODY_LINES[@]}" \
+    journal_write receiving "${CHECKPOINT_LINES[@]}" "$note_line" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} \
       "exit_result=$exit_result" "relaunch_tx=$RELAUNCH_TX"
     wait_for_secondmate_handoff_receipt
     CONTEXT_CUSTODY='receipt-confirmed'
@@ -1364,13 +1365,13 @@ do_relaunch() {
       "receipt_sha256=$RECEIPT_SHA256"
       "receipt_confirmation=received-and-resumed"
     )
-    journal_write retiring "${CHECKPOINT_LINES[@]}" "$note_line" "${CUSTODY_LINES[@]}" \
+    journal_write retiring "${CHECKPOINT_LINES[@]}" "$note_line" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} \
       "exit_result=$exit_result" "relaunch_tx=$RELAUNCH_TX" \
       || die "replacement confirmed context receipt, but its retirement phase could not be recorded"
     retire_confirmed_secondmate_handoff
   fi
 
-  journal_write complete "${CHECKPOINT_LINES[@]}" "$note_line" "${CUSTODY_LINES[@]}" "exit_result=$exit_result" "relaunch_tx=$RELAUNCH_TX"
+  journal_write complete "${CHECKPOINT_LINES[@]}" "$note_line" ${CUSTODY_LINES[@]+"${CUSTODY_LINES[@]}"} "exit_result=$exit_result" "relaunch_tx=$RELAUNCH_TX"
   RELAUNCH_ACTIVE=0
   echo "relaunched $ID harness=$TARGET_HARNESS from=$PRIOR_RECORDED_HARNESS model=$TARGET_MODEL effort=$TARGET_EFFORT backend=$BACKEND endpoint=$T worktree=$WT"
 }

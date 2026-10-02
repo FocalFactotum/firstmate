@@ -33,7 +33,7 @@ fm_git_identity fmtest fmtest@example.com
 TMP_ROOT=$(fm_test_tmproot fm-secondmate-restart)
 mkdir -p "$TMP_ROOT"
 TMP_ROOT=$(cd "$TMP_ROOT" && pwd -P)
-trap 'rm -rf -- "$TMP_ROOT"' EXIT
+trap 'fm_test_remove_tree "$TMP_ROOT"' EXIT
 
 # A session-provider stub that models the two things this pass depends on: the
 # harness exit command stops the agent, a launch brief starts the replacement,
@@ -946,11 +946,13 @@ test_restart_accepts_relative_directories() {
     arm_answer "$dir" sm1
     out=$(
       cd "$dir" || exit 1
-      case "$axis" in
-        home) FM_TEST_HOME=home; unset FM_STATE_OVERRIDE ;;
-        state) FM_STATE_OVERRIDE=home/state; unset FM_TEST_HOME ;;
-        both) FM_TEST_HOME=./home; FM_STATE_OVERRIDE=./home/state ;;
-      esac
+      if [ "$axis" = home ]; then
+        FM_TEST_HOME=home; unset FM_STATE_OVERRIDE
+      elif [ "$axis" = state ]; then
+        FM_STATE_OVERRIDE=home/state; unset FM_TEST_HOME
+      else
+        FM_TEST_HOME=./home; FM_STATE_OVERRIDE=./home/state
+      fi
       export FM_STATE_OVERRIDE FM_TEST_HOME
       run_restart "$dir" sm1
     ); rc=$?

@@ -4,9 +4,9 @@
 #
 # Usage: fm-context-handoff-receipt.sh <receipt-path> <task-id> <relaunch-tx> <handoff-sha256>
 #
-# The relaunch control plane places this exact command in the replacement-only
-# instructions and retains every full context copy until this bounded receipt
-# arrives. The receipt contains identifiers and a hash, never context content.
+# Run the exact command supplied in the replacement-only instructions, never
+# reconstruct its identifiers. docs/agent-control.md owns receipt verification
+# and copy retirement. The receipt carries identifiers and a hash, not context.
 set -eu
 
 usage() {

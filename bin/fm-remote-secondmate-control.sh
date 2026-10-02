@@ -4,8 +4,9 @@
 # Usage:
 #   fm-remote-secondmate-control.sh launch <id> <harness> <model|-> <effort|-> herdr [traceparent]
 #   fm-remote-secondmate-control.sh relaunch <id> <harness> <model|default|-> <effort|default|-> [<handoff-sha256> | --abandon-live-context]
-#     A handoff digest reads the context handoff from stdin and retains
-#     its host-side raw copy until the replacement confirms receipt and readiness.
+#     A handoff digest reads the context handoff from stdin. Its host-side raw
+#     copy is retired only after fm-control succeeds; refusal or uncertainty
+#     retains it. docs/agent-control.md owns the replacement receipt contract.
 #     Context abandonment requires current explicit captain authority.
 #     Omit custody only when recovering an already-dead agent.
 #   fm-remote-secondmate-control.sh state <id>
@@ -36,9 +37,9 @@
 # code root from origin. Because this home is a standalone clone, the target
 # commit is imported here first and the fast-forward itself is the shared one in
 # bin/fm-ff-lib.sh, so the clean, ancestry, and branch guards have a single owner.
-# A private parent-route state directory stores only the remote secondmate
-# agent's endpoint record; the home's own
-# state/*.meta remains reserved for workers the secondmate supervises.
+# A private parent-route state directory stores the remote secondmate agent's
+# endpoint record and relaunch custody artifacts; the home's own state/*.meta
+# remains reserved for workers the secondmate supervises.
 # Retirement closes only this secondmate's panes or workspace and never
 # stops fm-remote or removes a sibling secondmate's workspace or panes.
 #
