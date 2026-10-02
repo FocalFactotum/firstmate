@@ -216,13 +216,14 @@ while [ "$#" -gt 0 ]; do
   shift 2
 done
 case "$handoff" in /*) ;; *) exit 91 ;; esac
-cmp -s "$handoff" "$FM_TEST_HANDOFF"
+cmp -s "$handoff" "$FM_TEST_EXPECTED_HANDOFF"
 [ "$(shasum -a 256 "$handoff" | awk '{print $1}')" = "$digest" ]
 printf '%s\n' "$handoff" > "$FM_TEST_CAPTURE"
 SH
   out=$(
     cd "$TMP" || exit 1
-    PATH="/usr/bin:/bin:$PATH" FM_HOME=host FM_TEST_HANDOFF="$TMP/host-handoff.md" FM_TEST_CAPTURE="$TMP/host-path" \
+    export FM_TEST_EXPECTED_HANDOFF="$TMP/host-handoff.md"
+    PATH="/usr/bin:/bin:$PATH" FM_HOME=host FM_TEST_CAPTURE="$TMP/host-path" \
       bash "$host/bin/fm-remote-secondmate-control.sh" relaunch ios claude default default \
       "$digest" < "$TMP/host-handoff.md" 2>&1
   ); rc=$?
