@@ -928,8 +928,12 @@ prepare_secondmate_context_custody() {
       fi
       ;;
     dead|missing)
-      CONTEXT_CUSTODY="not-required-$state"
-      CUSTODY_LINES=("context_custody=$CONTEXT_CUSTODY")
+      if [ "$HANDOFF_FILE_SET" = 1 ]; then
+        capture_secondmate_handoff
+      else
+        CONTEXT_CUSTODY="not-required-$state"
+        CUSTODY_LINES=("context_custody=$CONTEXT_CUSTODY")
+      fi
       ;;
     *) die "secondmate $ID's endpoint reads '$state'; context custody cannot be established for an ambiguous or unreadable agent" ;;
   esac

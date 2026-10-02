@@ -104,6 +104,9 @@ case "${1:-}" in
               verb=$(cat "$D/answer-verb" 2>/dev/null || printf 'done')
               printf '%s [%s]: persistence response\n' "$verb" "$corr" \
                 >> "$(cat "$D/answer-status")"
+              if [ -f "$D/die-after-answer" ]; then
+                printf 'zsh' > "$D/command.$target"
+              fi
             fi
           fi
           ;;
@@ -330,6 +333,44 @@ test_persist_precedes_restart() {
   assert_absent "$(find "$dir/home/state" -maxdepth 1 -name 'sm1.secondmate-restart.handoff-*' -print -quit)" \
     "confirmed local resumption should retire the parent-owned raw handoff"
   pass "T2 the mate persists, receives the exact answer, and confirms safe resumption before raw context is retired"
+}
+
+test_done_then_died_delivers_saved_handoff_before_retirement() {
+  local confirmed dir out rc handoff receipt raw brief
+  for confirmed in 0 1; do
+    dir=$(new_case "done-then-died-$confirmed")
+    add_local_mate "$dir" sm1
+    arm_answer "$dir" sm1
+    : > "$dir/fake/die-after-answer"
+
+    out=$(FM_FAKE_CONFIRM_HANDOFF_RECEIPT="$confirmed" run_restart "$dir" sm1); rc=$?
+
+    assert_no_grep '^/exit$' "$dir/fake/literal" "the mate should already be dead after its done reply"
+    assert_contains "$(cat "$dir/fake/replacement-brief")" "## Exact correlated terminal response" \
+      "dead recovery must deliver the saved handoff to the replacement"
+    assert_contains "$(cat "$dir/fake/replacement-brief")" "persistence response" \
+      "the replacement must receive the done reply sent before death"
+    handoff=$(find "$dir/home/state" -maxdepth 1 -name 'sm1.secondmate-restart.handoff-*' -type f -print -quit)
+    receipt=$(grep '^receipt_file=' "$dir/home/state/sm1.control-relaunch" | cut -d= -f2-)
+    if [ "$confirmed" = 1 ]; then
+      expect_code 0 "$rc" "confirmed dead recovery should succeed"$'\n'"$out"
+      assert_contains "$out" "restarted: sm1" "confirmed recovery should report success"
+      assert_present "$receipt" "dead recovery must retain receipt evidence"
+      assert_absent "$handoff" "the parent handoff should retire only after receipt"
+      [ "$(grep '^context_custody=' "$dir/home/state/sm1.control-relaunch")" = context_custody=handoff-confirmed ] \
+        || fail "dead recovery did not record confirmed handoff delivery"
+    else
+      expect_code 3 "$rc" "unconfirmed dead recovery must not report success"$'\n'"$out"
+      assert_not_contains "$out" "restarted: sm1" "unconfirmed recovery must not release the parent handoff"
+      assert_present "$handoff" "unconfirmed recovery must retain the parent handoff"
+      raw=$(grep '^handoff_file=' "$dir/home/state/sm1.control-relaunch" | cut -d= -f2-)
+      brief=$(grep '^replacement_brief=' "$dir/home/state/sm1.control-relaunch" | cut -d= -f2-)
+      cmp -s "$handoff" "$raw" || fail "unconfirmed dead recovery lost the exact saved context"
+      assert_present "$brief" "unconfirmed dead recovery must retain the full delivery copy"
+      assert_absent "$receipt" "unconfirmed recovery must not fabricate a receipt"
+    fi
+  done
+  pass "done-then-died recovery delivers saved context and retires it only after receipt"
 }
 
 # --- T2b: an answer delivered at a zero-second bound still releases the gate -
@@ -972,6 +1013,7 @@ test_restart_accepts_relative_directories() {
 
 test_persist_gates_and_asks_only_for_open_records
 test_persist_precedes_restart
+test_done_then_died_delivers_saved_handoff_before_retirement
 test_restart_accepts_relative_directories
 test_arrived_answer_precedes_deadline_check
 test_only_done_persist_reply_releases_restart_gate
