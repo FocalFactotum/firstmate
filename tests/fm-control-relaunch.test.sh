@@ -1526,7 +1526,7 @@ test_live_secondmate_handoff_waits_for_receipt_before_retiring_copies() {
 }
 
 test_live_secondmate_handoff_accepts_relative_directories() {
-  local axis dir handoff digest out rc receipt
+  local axis dir handoff digest out rc receipt relative_home relative_state
   for axis in home state both; do
     dir=$(new_case "sm-relative-$axis" smrelative)
     add_secondmate_task "$dir" smrelative
@@ -1536,14 +1536,14 @@ test_live_secondmate_handoff_accepts_relative_directories() {
     out=$(
       cd "$dir" || exit 1
       if [ "$axis" = home ]; then
-        FM_TEST_HOME=home; unset FM_STATE_OVERRIDE
+        relative_home=home; relative_state=''
       elif [ "$axis" = state ]; then
-        FM_STATE_OVERRIDE=home/state; unset FM_TEST_HOME
+        relative_home=''; relative_state=home/state
       else
-        FM_TEST_HOME=./home; FM_STATE_OVERRIDE=./home/state
+        relative_home=./home; relative_state=./home/state
       fi
-      export FM_STATE_OVERRIDE FM_TEST_HOME
-      FM_DATA_OVERRIDE=home/data FM_FAKE_CONFIRM_HANDOFF_RECEIPT=1 \
+      FM_TEST_HOME="$relative_home" FM_STATE_OVERRIDE="$relative_state" \
+        FM_DATA_OVERRIDE=home/data FM_FAKE_CONFIRM_HANDOFF_RECEIPT=1 \
         run_control "$dir" smrelative relaunch --handoff-file "$handoff" --handoff-sha256 "$digest"
     ); rc=$?
     expect_code 0 "$rc" "relative $axis directories must preserve live context across replacement"$'\n'"$out"
