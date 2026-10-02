@@ -3230,6 +3230,43 @@ SH
   pass "herdr presentation: renamed parent orders and binds after its journaled legacy child"
 }
 
+test_projection_shared_launcher_children_are_read_only() {
+  local dir state home log resp fb out label_a label_b
+  dir="$TMP_ROOT/projection-shared-launcher"; state="$dir/home-b/state"; home="$dir/home-b"
+  mkdir -p "$dir/responses" "$state" "$dir/home-a/state"
+  log="$dir/log"; resp="$dir/responses"; : > "$log"
+  label_a='└ task-a · p:AbCdEfGhIjKlMnOpQrStUv'
+  label_b='└ task-b · p:ZyXwVuTsRqPoNmLkJiHgFe'
+  # Each home keeps its own journal; ordering must not read the other home.
+  : > "$dir/home-a/state/task-a.herdr-presentation"
+  : > "$state/task-b.herdr-presentation"
+  bash -c '
+    . "$0/bin/backends/herdr.sh"
+    fm_backend_herdr_projection_journal_write_v2 "$1/home-a/state/task-a.herdr-presentation" task-a AbCdEfGhIjKlMnOpQrStUv "$1/home-a" fmtest wa wa:t1 wa:p1 wparent FIRSTMATE "$2" fm-task-a
+    fm_backend_herdr_projection_journal_write_v2 "$1/home-b/state/task-b.herdr-presentation" task-b ZyXwVuTsRqPoNmLkJiHgFe "$1/home-b" fmtest wb wb:t1 wb:p1 wparent FIRSTMATE "$3" fm-task-b
+  ' "$ROOT" "$dir" "$label_a" "$label_b" || fail "could not bind shared-launcher fixtures"
+  printf '%s\n' "{\"result\":{\"workspaces\":[{\"workspace_id\":\"wparent\",\"label\":\"FIRSTMATE\"},{\"workspace_id\":\"wa\",\"label\":\"$label_a\"},{\"workspace_id\":\"wb\",\"label\":\"$label_b\"}]}}" > "$resp/1.out"
+  cp "$resp/1.out" "$resp/2.out"
+  printf '%s\n' '{"result":{"tabs":[{"tab_id":"wb:t1","label":"fm-task-b"}]}}' > "$resp/3.out"
+  printf '%s\n' '{"result":{"panes":[{"pane_id":"wb:p1","tab_id":"wb:t1"}]}}' > "$resp/4.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$(PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" bash -c '
+    . "$0/bin/backends/herdr.sh"
+    fm_backend_herdr_projection_order_best_effort fmtest wb FIRSTMATE wparent "$1" "$2"
+    fm_backend_herdr_projection_live_binding_matches fmtest ZyXwVuTsRqPoNmLkJiHgFe wb wb:t1 wb:p1 wparent FIRSTMATE "$3" fm-task-b "$1" "$2" || exit 1
+  ' "$ROOT" "$state" "$home" "$label_b" 2>&1) || fail "second home lost its shared-launcher binding: $out"
+  [ -z "$out" ] || fail "shared-launcher ordering warned: $out"
+  [ "$(wc -l < "$log" | tr -d '[:space:]')" = 4 ] || fail "shared-launcher ordering mutated the layout"
+  # Duplicate foreign tokens remain ambiguous even though the target is exact.
+  rm -f "$resp/.count"
+  printf '%s\n' "{\"result\":{\"workspaces\":[{\"workspace_id\":\"wparent\",\"label\":\"FIRSTMATE\"},{\"workspace_id\":\"wa\",\"label\":\"$label_a\"},{\"workspace_id\":\"wb\",\"label\":\"$label_b\"},{\"workspace_id\":\"duplicate\",\"label\":\"$label_a\"}]}}" > "$resp/1.out"
+  if PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" bash -c '
+    . "$0/bin/backends/herdr.sh"
+    fm_backend_herdr_projection_live_binding_matches fmtest ZyXwVuTsRqPoNmLkJiHgFe wb wb:t1 wb:p1 wparent FIRSTMATE "$1" fm-task-b "$2" "$3"
+  ' "$ROOT" "$label_b" "$state" "$home"; then fail "duplicate foreign token granted a binding"; fi
+  pass "herdr presentation: homes sharing an exact launcher retain bindings without foreign journal authority"
+}
+
 test_projection_order_traverses_journaled_custom_parent() {
   local dir state home log resp fb mover mover_log out token review_label layout
   dir="$TMP_ROOT/projection-order-custom-following-parent"; state="$dir/state"; home="$dir/home"
@@ -6049,6 +6086,7 @@ test_projection_order_moves_only_exact_new_workspace_and_preserves_relative_orde
 test_projection_order_secondmate_parent_block
 test_projection_order_foreign_legacy_child_is_read_only
 test_projection_order_renamed_parent_with_journaled_legacy_child
+test_projection_shared_launcher_children_are_read_only
 test_projection_order_traverses_journaled_custom_parent
 test_projection_order_allows_intervening_parent_child_block
 test_projection_order_human_spaces_never_move_targets

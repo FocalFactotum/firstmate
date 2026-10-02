@@ -1555,9 +1555,16 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
       .workspace_id as $id
       | .label as $label
       | any($owned[]; .token as $token | .workspace_id == $id and .parent_workspace_id == $owner and ($label | endswith(" · p:" + $token)));
-    def is_child_for($owner):
+    # A current-format sibling is read-only layout evidence, not ownership.
+    # Another home can project into the same exact launcher workspace.
+    def is_shared_child($spaces):
+      .workspace_id as $id | .label as $label
+      | is_new_child
+        and ([$spaces[] | select(.workspace_id == $id)] | length) == 1
+        and ([$spaces[] | select((.label | type) == "string" and (.label | endswith($label[-27:])))] | length) == 1;
+    def is_child_for($owner; $spaces):
       if ($strict | length) > 0 then
-        (is_new_child or is_journaled_legacy_child) and is_owned_child_for($parent_ws)
+        is_shared_child($spaces) or ((is_new_child or is_journaled_legacy_child) and is_owned_child_for($parent_ws))
       else
         is_new_child or is_legacy_child_for($owner)
       end;
@@ -1574,7 +1581,7 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
     | (
         reduce range($pidx + 1; $current) as $i (
           0;
-          if ($spaces[$i] | is_child_for($parent)) and (. == ($i - $pidx - 1))
+          if ($spaces[$i] | is_child_for($parent; $spaces)) and (. == ($i - $pidx - 1))
           then . + 1
           else .
           end
@@ -2813,6 +2820,13 @@ fm_backend_herdr_projection_live_binding_matches() {  # <session> <token> <works
         .workspace_id as $id
         | .label as $label
         | any($owned[]; .token as $token | .workspace_id == $id and ($label | endswith(" · p:" + $token)));
+      # Foreign current-format siblings can share the exact parent block;
+      # only the target task journal and exact endpoint authorize its reclaim.
+      def is_shared_child($spaces):
+        .workspace_id as $id | .label as $label
+        | is_new_child
+          and ([$spaces[] | select(.workspace_id == $id)] | length) == 1
+          and ([$spaces[] | select((.label | type) == "string" and (.label | endswith($label[-27:])))] | length) == 1;
       (.result.workspaces // null) as $spaces
       | select(($spaces | type) == "array")
       | select(([$spaces[]? | select(.workspace_id == $workspace)] | length) == 1)
@@ -2828,7 +2842,7 @@ fm_backend_herdr_projection_live_binding_matches() {  # <session> <token> <works
       | select($child_index > $parent_index)
       | reduce range($parent_index + 1; $child_index) as $i
           (true; . and ($spaces[$i] | if ($strict | length) > 0 then
-            (is_new_child or is_journaled_legacy_child) and is_owned_child
+            is_shared_child($spaces) or ((is_new_child or is_journaled_legacy_child) and is_owned_child)
             else is_new_child or is_legacy_child_for($parent_label) end))
       | select(. == true)
     ' >/dev/null 2>&1 || return 1
