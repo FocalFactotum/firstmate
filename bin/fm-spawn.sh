@@ -4858,11 +4858,8 @@ else
   SPAWN_FRESH_COMMIT_PENDING=1
 fi
 SPAWN_META_PATH=$SPAWN_META_TMP
-# fm_pr_metadata_identity_parse (bin/fm-pr-lib.sh) only tolerates pr_head= and
-# x_* lines after pr=, so those three carried-over line shapes must stay LAST
-# in the republished record - anything else this function writes after them,
-# such as control_relaunch_tx= below, would otherwise land between or after
-# them and break an armed merge poll's parse on relaunch (issue #5802).
+# Keep control_relaunch_tx before the preserved tail to satisfy the identity
+# parser's ordering contract (fm_pr_metadata_identity_parse, bin/fm-pr-lib.sh).
 preserve_relaunch_meta_head() {
   awk -F= '
     BEGIN {
@@ -5211,10 +5208,8 @@ spawn_record_traceparent() {
     acquired=1
   fi
   SPAWN_META_TMP="$STATE/.$ID.meta.trace.${BASHPID:-$$}"
-  # fm_pr_metadata_identity_parse only tolerates pr_head= and x_* lines after
-  # pr=, so an armed merge poll's carried-over pr=/pr_head=/x_* lines must stay
-  # last: insert the carrier before the first of them rather than appending it
-  # after (issue #5802's same defect shape).
+  # Insert the carrier before the preserved tail to satisfy the identity
+  # parser's ordering contract (fm_pr_metadata_identity_parse, bin/fm-pr-lib.sh).
   if [ ! -f "$meta" ] || [ ! -w "$meta" ] ||
     ! awk -F= -v tp="$SPAWN_TRACEPARENT" '
         $1 == "traceparent" { next }

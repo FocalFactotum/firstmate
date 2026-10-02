@@ -1786,11 +1786,9 @@ EOF
 
   if [ "$has_meta" = 1 ]; then
     if [ "$(meta_value "$meta" decisions_reviewed)" != 1 ] || [ "$previous" != "$keys" ]; then
-      # fm_pr_metadata_identity_parse (bin/fm-pr-lib.sh) only tolerates
-      # pr_head= and x_* lines after pr=, so an armed merge poll's
-      # carried-over pr=/pr_head=/x_* lines must stay last: insert these
-      # decision-review lines before the first of them rather than blindly
-      # appending after (issue #5802's same defect shape).
+      # Insert the review attestation before the preserved tail to satisfy the
+      # identity parser's ordering contract (fm_pr_metadata_identity_parse,
+      # bin/fm-pr-lib.sh).
       decision_meta_tmp=$(mktemp "${meta}.decisions.XXXXXX") \
         || fail "could not stage decision metadata for $origin"
       if ! awk -F= -v keys="$keys" '

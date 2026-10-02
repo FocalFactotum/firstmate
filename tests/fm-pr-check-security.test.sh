@@ -3546,13 +3546,9 @@ relaunch_run_control() {  # <case-dir> <args...>
     "$CONTROL" "$@" 2>&1
 }
 
-# Regression for issue #5802: bin/fm-control.sh relaunch republishes a task's
-# meta as fresh launch keys, then preserve_relaunch_meta's carried-over pr=/
-# pr_head=/x_* lines, then control_relaunch_tx=. fm_pr_metadata_identity_parse
-# only tolerates pr_head=/x_* lines after pr=, so control_relaunch_tx= landing
-# after them broke the identity parse and silently ended merge-poll
-# monitoring. Arms a real merge poll, relaunches the task through the real
-# control plane, and asserts the poll is still authenticated afterward.
+# Exercise both transaction-marker and trace-carrier writes through the real
+# control plane; the armed poll must still satisfy fm_pr_metadata_identity_parse
+# (bin/fm-pr-lib.sh) afterward.
 test_relaunch_preserves_an_armed_merge_poll() {
   local dir out rc id=task-relaunch expected
   dir=$(make_case relaunch-armed-poll)
