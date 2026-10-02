@@ -1559,6 +1559,7 @@ fm_backend_herdr_projection_order_best_effort() {  # <session> <created-workspac
     def is_shared_child($spaces):
       .workspace_id as $id | .label as $label
       | is_new_child
+        and all($owned[] | select(.workspace_id == $id); .parent_workspace_id == $parent_ws)
         and ([$spaces[] | select(.workspace_id == $id)] | length) == 1
         and ([$spaces[] | select((.label | type) == "string" and (.label | endswith($label[-27:])))] | length) == 1;
     def is_child_for($owner; $spaces):
@@ -2793,7 +2794,7 @@ fm_backend_herdr_projection_live_binding_matches() {  # <session> <token> <works
   local parent_label=$7 workspace_label=$8 task_label=$9 state=${10:-} home=${11:-} list tabs panes owned='[]' canonical_home
   if [ -n "$state" ]; then
     canonical_home=$(fm_backend_herdr_projection_home_identity "$home") || return 1
-    owned=$(fm_backend_herdr_projection_owned_children "$state" "$canonical_home" "$session" "$parent_workspace") || return 1
+    owned=$(fm_backend_herdr_projection_owned_children "$state" "$canonical_home" "$session" '') || return 1
   fi
   list=$(fm_backend_herdr_cli "$session" workspace list 2>/dev/null) || return 1
   printf '%s' "$list" | jq -e \
@@ -2818,12 +2819,13 @@ fm_backend_herdr_projection_live_binding_matches() {  # <session> <token> <works
       def is_owned_child:
         .workspace_id as $id
         | .label as $label
-        | any($owned[]; .token as $token | .workspace_id == $id and ($label | endswith(" · p:" + $token)));
+        | any($owned[]; .token as $token | .workspace_id == $id and .parent_workspace_id == $parent_workspace and ($label | endswith(" · p:" + $token)));
       # Foreign current-format siblings can share the exact parent block;
       # only the target task journal and exact endpoint authorize its reclaim.
       def is_shared_child($spaces):
         .workspace_id as $id | .label as $label
         | is_new_child
+          and all($owned[] | select(.workspace_id == $id); .parent_workspace_id == $parent_workspace)
           and ([$spaces[] | select(.workspace_id == $id)] | length) == 1
           and ([$spaces[] | select((.label | type) == "string" and (.label | endswith($label[-27:])))] | length) == 1;
       (.result.workspaces // null) as $spaces

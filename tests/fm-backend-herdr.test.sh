@@ -3267,6 +3267,61 @@ test_projection_shared_launcher_children_are_read_only() {
   pass "herdr presentation: homes sharing an exact launcher retain bindings without foreign journal authority"
 }
 
+test_projection_foreign_recorded_child_breaks_launcher_block() {
+  local dir state home log resp fb out foreign_token new_token foreign_label new_label
+  dir="$TMP_ROOT/projection-foreign-recorded-child"; state="$dir/state"; home="$dir/home"
+  mkdir -p "$dir/responses" "$state" "$home"
+  log="$dir/log"; resp="$dir/responses"; : > "$log"
+  foreign_token=$(bash -c '
+    . "$0/bin/backends/herdr.sh"
+    token=$(fm_backend_herdr_projection_journal_create "$1" foreign-r1) || exit 1
+    label=$(fm_backend_herdr_projection_workspace_label foreign-r1 "$token")
+    fm_backend_herdr_projection_journal_bind \
+      "$1/foreign-r1.herdr-presentation" foreign-r1 "$2" fmtest \
+      wforeign wforeign:t1 wforeign:p1 wreview REVIEW "$label" fm-foreign-r1 || exit 1
+    printf "%s" "$token"
+  ' "$ROOT" "$state" "$home") || fail "could not bind foreign-parent child"
+  new_token=$(bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_projection_journal_create "$1" new-r1' "$ROOT" "$state") \
+    || fail "could not create new projection journal"
+  foreign_label="└ foreign-r1 · p:$foreign_token"
+  new_label="└ new-r1 · p:$new_token"
+  # The REVIEW child was manually moved between FIRSTMATE and its new projection.
+  printf '%s\n' "{\"result\":{\"workspaces\":[{\"workspace_id\":\"wreview\",\"label\":\"REVIEW\"},{\"workspace_id\":\"wlauncher\",\"label\":\"FIRSTMATE\"},{\"workspace_id\":\"wforeign\",\"label\":\"$foreign_label\"},{\"workspace_id\":\"wnew\",\"label\":\"$new_label\"}]}}" > "$resp/1.out"
+  printf '%s\n' '{"result":{"tabs":[{"tab_id":"wnew:t1","label":"fm-new-r1"}]}}' > "$resp/2.out"
+  printf '%s\n' '{"result":{"panes":[{"pane_id":"wnew:p1","tab_id":"wnew:t1"}]}}' > "$resp/3.out"
+  cp "$state/foreign-r1.herdr-presentation" "$dir/foreign.before"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$(PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" bash -c '
+    . "$0/bin/backends/herdr.sh"
+    fm_backend_herdr_projection_order_best_effort fmtest wnew FIRSTMATE wlauncher "$1" "$2"
+    rm -f "$FM_HERDR_RESPONSES/.count"
+    if fm_backend_herdr_projection_live_binding_matches \
+      fmtest "$3" wnew wnew:t1 wnew:p1 wlauncher FIRSTMATE "$4" fm-new-r1 "$1" "$2"; then
+      exit 3
+    fi
+    fm_backend_herdr_projection_journal_snapshot "$1/new-r1.herdr-presentation" new-r1 || exit 4
+    [ "$FM_BACKEND_HERDR_JOURNAL_VERSION" = 1 ] || exit 5
+    # Model an already published binding whose sibling is moved before restart.
+    fm_backend_herdr_projection_journal_bind \
+      "$1/new-r1.herdr-presentation" new-r1 "$2" fmtest \
+      wnew wnew:t1 wnew:p1 wlauncher FIRSTMATE "$4" fm-new-r1 || exit 6
+    cp "$1/new-r1.herdr-presentation" "$1/new.before"
+    rm -f "$FM_HERDR_RESPONSES/.count"
+    fm_backend_herdr_projection_reclaim_task \
+      fmtest "$1/new-r1.herdr-presentation" new-r1 "$2" \
+      wnew wnew:t1 wnew:p1 fm-new-r1 "$2"
+    [ "$?" = 2 ] || exit 7
+  ' "$ROOT" "$state" "$home" "$new_token" "$new_label" 2>&1) \
+    || fail "foreign recorded child was accepted by publication or reclaim: $out"
+  assert_contains "$out" "ambiguous workspace layout" "ordering accepted a child recorded under another parent"
+  assert_contains "$out" "non-nested live shape" "reclaim did not refuse the interleaved layout"
+  [ "$(cat "$log")" = "$(printf 'HERDR_SESSION=fmtest\x1fworkspace\x1flist\x1f--session\x1ffmtest\n%.0s' 1 2 3)" ] \
+    || fail "foreign-parent refusal did more than three read-only workspace lists"
+  cmp -s "$dir/foreign.before" "$state/foreign-r1.herdr-presentation" || fail "foreign journal changed"
+  cmp -s "$state/new.before" "$state/new-r1.herdr-presentation" || fail "refused reclaim changed its binding"
+  pass "herdr presentation: a child recorded under another parent breaks the launcher block without mutation"
+}
+
 test_projection_order_traverses_journaled_custom_parent() {
   local dir state home log resp fb mover mover_log out token review_label layout
   dir="$TMP_ROOT/projection-order-custom-following-parent"; state="$dir/state"; home="$dir/home"
@@ -6087,6 +6142,7 @@ test_projection_order_secondmate_parent_block
 test_projection_order_foreign_legacy_child_is_read_only
 test_projection_order_renamed_parent_with_journaled_legacy_child
 test_projection_shared_launcher_children_are_read_only
+test_projection_foreign_recorded_child_breaks_launcher_block
 test_projection_order_traverses_journaled_custom_parent
 test_projection_order_allows_intervening_parent_child_block
 test_projection_order_human_spaces_never_move_targets
