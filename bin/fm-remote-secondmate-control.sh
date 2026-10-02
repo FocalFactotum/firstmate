@@ -61,8 +61,6 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 TARGET_HOME=${FM_HOME:?FM_HOME is required}
-CONTROL_STATE="$TARGET_HOME/state/parent-route"
-CONTROL_DATA="$TARGET_HOME/data/.parent-route"
 REMOTE_HERDR_SESSION=fm-remote
 
 # shellcheck source=bin/fm-backend.sh
@@ -103,6 +101,12 @@ validate_home() { # <id> [allow-absent]
   local id=$1 allow_absent=${2:-no} marker
   if [ ! -e "$TARGET_HOME" ] && [ ! -L "$TARGET_HOME" ] && [ "$allow_absent" = yes ]; then return 2; fi
   [ -d "$TARGET_HOME" ] && [ ! -L "$TARGET_HOME" ] || die "remote secondmate home is unavailable or unsafe"
+  case "$TARGET_HOME" in
+    /*) ;;
+    *) TARGET_HOME=$(CDPATH='' cd -- "$TARGET_HOME" && pwd -P) || die "remote secondmate home cannot be resolved" ;;
+  esac
+  CONTROL_STATE="$TARGET_HOME/state/parent-route"
+  CONTROL_DATA="$TARGET_HOME/data/.parent-route"
   [ -f "$TARGET_HOME/.fm-secondmate-home" ] && [ ! -L "$TARGET_HOME/.fm-secondmate-home" ] \
     || die "remote home is not a seeded secondmate home"
   marker=$(cat "$TARGET_HOME/.fm-secondmate-home")

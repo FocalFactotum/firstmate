@@ -254,7 +254,7 @@ arm_answer() {
 
 run_restart() {  # <case-dir> <args...>
   local dir=$1; shift
-  env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" \
+  env PATH="$dir/fakebin:$PATH" FM_HOME="${FM_TEST_HOME:-$dir/home}" FM_FAKE_DIR="$dir/fake" \
     FM_SPAWN_NO_GUARD=1 FM_SECONDMATE_PERSIST_POLL=1 \
     FM_SECONDMATE_PERSIST_WAIT="${FM_TEST_PERSIST_WAIT:-30}" \
     FM_CONTROL_POLL=0.01 FM_CONTROL_EXIT_WAIT=0.05 FM_CONTROL_LAUNCH_WAIT=0.05 \
@@ -938,8 +938,39 @@ test_already_current_unprovable_mate_stays_on_the_nudge_path() {
   pass "T16 an already-current mate with an unprovable runtime keeps the honest nudge path"
 }
 
+test_restart_accepts_relative_directories() {
+  local axis dir out rc receipt
+  for axis in home state both; do
+    dir=$(new_case "relative-$axis")
+    add_local_mate "$dir" sm1
+    arm_answer "$dir" sm1
+    out=$(
+      cd "$dir" || exit 1
+      case "$axis" in
+        home) FM_TEST_HOME=home; unset FM_STATE_OVERRIDE ;;
+        state) FM_STATE_OVERRIDE=home/state; unset FM_TEST_HOME ;;
+        both) FM_TEST_HOME=./home; FM_STATE_OVERRIDE=./home/state ;;
+      esac
+      export FM_STATE_OVERRIDE FM_TEST_HOME
+      run_restart "$dir" sm1
+    ); rc=$?
+    expect_code 0 "$rc" "relative $axis directories must permit a confirmed restart"$'\n'"$out"
+    assert_contains "$out" "summary: 1 of 1 restarted, 0 nudged, 0 unreached" \
+      "relative directories must not lose the replacement"
+    receipt=$(grep '^receipt_file=' "$dir/home/state/sm1.control-relaunch" | cut -d= -f2-)
+    case "$receipt" in /*) ;; *) fail "restart receipt path is not absolute: $receipt" ;; esac
+    assert_present "$receipt" "restart must retain receipt evidence"
+    assert_contains "$(cat "$dir/fake/replacement-brief")" "persistence response" \
+      "replacement must receive the persisted context"
+    assert_absent "$(find "$dir/home/state" -maxdepth 1 -name 'sm1.secondmate-restart.handoff-*' -print -quit)" \
+      "confirmed relative-path restart must retire the parent handoff"
+  done
+  pass "restart: relative home and state inputs preserve confirmed context custody"
+}
+
 test_persist_gates_and_asks_only_for_open_records
 test_persist_precedes_restart
+test_restart_accepts_relative_directories
 test_arrived_answer_precedes_deadline_check
 test_only_done_persist_reply_releases_restart_gate
 test_answer_between_resolution_and_timeout_wins

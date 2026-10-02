@@ -92,8 +92,16 @@ if [ -z "${FM_HOME:-}" ]; then
   exit 1
 fi
 [ -d "$FM_HOME" ] || { echo "error: FM_HOME '$FM_HOME' is not a directory" >&2; exit 1; }
+case "$FM_HOME" in
+  /*) ;;
+  *) FM_HOME=$(CDPATH='' cd -- "$FM_HOME" && pwd -P) || exit 1 ;;
+esac
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 [ -d "$STATE" ] || { echo "error: state dir '$STATE' is missing; fm-secondmate-restart cannot resolve second mates for FM_HOME '$FM_HOME'" >&2; exit 1; }
+case "$STATE" in
+  /*) ;;
+  *) STATE=$(CDPATH='' cd -- "$STATE" && pwd -P) || exit 1; FM_STATE_OVERRIDE=$STATE ;;
+esac
 
 # shellcheck source=bin/fm-secondmate-restart-lib.sh
 . "$SCRIPT_DIR/fm-secondmate-restart-lib.sh"

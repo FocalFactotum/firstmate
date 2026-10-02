@@ -271,7 +271,7 @@ run_control() {  # <case-dir> <args...>
   mkdir -p "$dir/user-home"
   env -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_SESSION -u HERDR_SOCKET_PATH \
     -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID \
-    PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" \
+    PATH="$dir/fakebin:$PATH" FM_HOME="${FM_TEST_HOME:-$dir/home}" FM_FAKE_DIR="$dir/fake" \
     HOME="$dir/user-home" CLAUDE_CONFIG_DIR='' \
     FM_SPAWN_NO_GUARD=1 GROK_HOME="$dir/grokhome" \
     FM_CONTROL_POLL=0.01 FM_CONTROL_EXIT_WAIT=0.05 FM_CONTROL_LAUNCH_WAIT=0.05 \
@@ -1525,6 +1525,38 @@ test_live_secondmate_handoff_waits_for_receipt_before_retiring_copies() {
   pass "fm-control relaunch: exact context reaches the replacement and copies retire only after receipt"
 }
 
+test_live_secondmate_handoff_accepts_relative_directories() {
+  local axis dir handoff digest out rc receipt
+  for axis in home state both; do
+    dir=$(new_case "sm-relative-$axis" smrelative)
+    add_secondmate_task "$dir" smrelative
+    handoff="$dir/handoff.md"
+    printf 'Recoverable relative-directory context.\n' > "$handoff"
+    digest=$(shasum -a 256 "$handoff" | awk '{print $1}')
+    out=$(
+      cd "$dir" || exit 1
+      case "$axis" in
+        home) FM_TEST_HOME=home; unset FM_STATE_OVERRIDE ;;
+        state) FM_STATE_OVERRIDE=home/state; unset FM_TEST_HOME ;;
+        both) FM_TEST_HOME=./home; FM_STATE_OVERRIDE=./home/state ;;
+      esac
+      export FM_STATE_OVERRIDE FM_TEST_HOME
+      FM_DATA_OVERRIDE=home/data FM_FAKE_CONFIRM_HANDOFF_RECEIPT=1 \
+        run_control "$dir" smrelative relaunch --handoff-file "$handoff" --handoff-sha256 "$digest"
+    ); rc=$?
+    expect_code 0 "$rc" "relative $axis directories must preserve live context across replacement"$'\n'"$out"
+    [ "$(journal_field "$dir" smrelative context_custody)" = handoff-confirmed ] \
+      || fail "relative $axis directories did not complete custody"
+    receipt=$(journal_field "$dir" smrelative receipt_file)
+    case "$receipt" in /*) ;; *) fail "receipt path is not absolute: $receipt" ;; esac
+    assert_present "$receipt" "replacement must confirm receipt from its own directory"
+    assert_contains "$(cat "$dir/fake/replacement-brief")" "Recoverable relative-directory context." \
+      "replacement must receive the original context"
+    [ "$(cat "$dir/fake/command")" = claude ] || fail "replacement is not running"
+  done
+  pass "fm-control relaunch: relative home, state and data inputs retain confirmed context custody"
+}
+
 test_empty_live_secondmate_handoff_refuses_before_stop() {
   local dir handoff digest out rc
   dir=$(new_case sm-custody-empty smempty)
@@ -2632,6 +2664,7 @@ test_prepublication_abort_retires_replacement_wiring_and_busy_state
 test_journal_records_the_checkpoint_it_proved
 test_live_secondmate_relaunch_requires_explicit_context_custody
 test_live_secondmate_handoff_waits_for_receipt_before_retiring_copies
+test_live_secondmate_handoff_accepts_relative_directories
 test_empty_live_secondmate_handoff_refuses_before_stop
 test_unconfirmed_live_secondmate_handoff_retains_full_context
 test_live_secondmate_relaunch_requires_explicit_abandonment_choice
