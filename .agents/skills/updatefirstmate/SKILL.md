@@ -23,9 +23,7 @@ Replacing the agent is also the only thing that re-resolves the launch-time wiri
 
 That is why **every eligible live second mate gets a restart attempt after a successful update, including one that was already on the target commit.**
 Launch-time wiring is not derivable from a file diff, so an unchanged tracked surface is not evidence the running agent is already on the current behavior.
-Among mates eligible for restart, an unsuccessful or missing persistence reply also prevents replacement; the restart command reports a nudge or an unreached outcome rather than a reload.
-
-**One-time rollout note:** the update that carries this change is still executed by the previous release, which restarts only the mates whose `AGENTS.md` or `.agents/skills/` moved on that pass. After it completes, run `bin/fm-secondmate-restart.sh <fm-id>...` once with every live second mate ID, not only the ones that release named; later updates follow the normal flow below.
+The [`restart command`](../../../bin/fm-secondmate-restart.sh) owns the persist gate and honest fallback outcomes.
 
 The primary update is fast-forward only, while each secondmate uses the same guarded convergence path plus one narrow recovery for squash-merged local history.
 For a remote route, it updates the configured Firstmate code root on that host from its own origin, then guardedly fast-forwards the persistent home to that code-root commit.
@@ -66,10 +64,10 @@ This touches only the firstmate repo and its own worktrees, never anything under
    This is automatic and needs no per-mate confirmation from the captain.
    Local and remote mates go in the same list; the command owns the transport, the profile each replacement runs on, and the wait.
 
-   It asks every listed mate first to write down the open work it holds only in its conversation, and restarts one only after that mate's own correlated terminal `done` answer comes back and its context handoff can be retained.
+   Do not bypass the [restart command's persist gate](../../../bin/fm-secondmate-restart.sh).
    A mate that is mid-turn queues the request behind that turn.
    That is the whole point of the step, so do not work around it: it is what keeps a captain call the mate had formed but never registered from being lost with the conversation.
-   Its header owns the request, the bound, and the two knobs that change them.
+   Its header owns the request, wait bounds, and context-handoff lifecycle.
 
    Read its per-mate lines and its closing `summary:` line as the outcome:
    - `restarted: <id>` - that mate is now genuinely running the current instructions and launch-time settings.

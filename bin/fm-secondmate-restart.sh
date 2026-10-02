@@ -32,9 +32,10 @@
 #      lands on the parent channel. Progress and terminal non-success replies do
 #      not authorize replacement; a blocked, failed, or needs-decision answer
 #      takes the ordinary nudge path. The exact request and correlated answer
-#      become a content-addressed handoff delivered to the replacement. Its raw
-#      copies remain until that agent confirms receipt and readiness to resume;
-#      a failed or uncertain local or remote delivery retains the parent copy.
+#      become a correlation-bound handoff delivered to the replacement. The
+#      parent source is retired only after the relaunch command succeeds; a failed
+#      or uncertain local or remote delivery retains it. docs/agent-control.md
+#      owns the replacement receipt and control-owned copy retirement contract.
 #      The gate is terminal success, never a wall clock, so a mate that is
 #      mid-turn queues the request behind that turn; the bound below exists to
 #      end the wait, not to authorize a restart. A timeout deliberately leaves
@@ -183,8 +184,6 @@ classify_persist_reply() {  # <array-index>
   esac
 }
 
-# Advance only a terminal persist result. A terminal non-success reply settles
-# its own expectation but never authorizes replacement; progress keeps waiting.
 restart_sha256_file() {  # <path>
   if command -v shasum >/dev/null 2>&1; then
     shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'
@@ -235,6 +234,8 @@ write_context_handoff() {  # <array-index> <destination>
   return 0
 }
 
+# Advance only a terminal persist result. A terminal non-success reply settles
+# its own expectation but never authorizes replacement; progress keeps waiting.
 advance_persist_reply() {  # <array-index>
   local i=$1 id rec status_file handoff
   id=${IDS[$i]}

@@ -45,7 +45,7 @@ relaunch_cleanup() {
   for d in "${TASK_TMPS[@]:-}"; do
     [ -n "$d" ] && rm -rf "$d"
   done
-  rm -rf "$TMP_ROOT"
+  fm_test_remove_tree "$TMP_ROOT"
 }
 trap relaunch_cleanup EXIT
 
@@ -1535,11 +1535,13 @@ test_live_secondmate_handoff_accepts_relative_directories() {
     digest=$(shasum -a 256 "$handoff" | awk '{print $1}')
     out=$(
       cd "$dir" || exit 1
-      case "$axis" in
-        home) FM_TEST_HOME=home; unset FM_STATE_OVERRIDE ;;
-        state) FM_STATE_OVERRIDE=home/state; unset FM_TEST_HOME ;;
-        both) FM_TEST_HOME=./home; FM_STATE_OVERRIDE=./home/state ;;
-      esac
+      if [ "$axis" = home ]; then
+        FM_TEST_HOME=home; unset FM_STATE_OVERRIDE
+      elif [ "$axis" = state ]; then
+        FM_STATE_OVERRIDE=home/state; unset FM_TEST_HOME
+      else
+        FM_TEST_HOME=./home; FM_STATE_OVERRIDE=./home/state
+      fi
       export FM_STATE_OVERRIDE FM_TEST_HOME
       FM_DATA_OVERRIDE=home/data FM_FAKE_CONFIRM_HANDOFF_RECEIPT=1 \
         run_control "$dir" smrelative relaunch --handoff-file "$handoff" --handoff-sha256 "$digest"

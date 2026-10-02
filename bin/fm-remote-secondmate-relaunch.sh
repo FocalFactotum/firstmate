@@ -3,8 +3,8 @@
 # republish this parent's own route record to match what the host confirmed.
 #
 # Usage: fm-remote-secondmate-relaunch.sh <id> <harness> <model|default|-> <effort|default|-> [<handoff-sha256> | --abandon-live-context]
-#   A handoff digest streams the context handoff from stdin to the host, which
-#   retains it until the replacement confirms receipt and readiness.
+#   A handoff digest streams the context handoff from stdin to the host;
+#   bin/fm-remote-secondmate-control.sh owns transport-copy retention.
 #   Context abandonment requires current explicit captain authority.
 #   Omit custody only when recovering an already-dead agent.
 #
