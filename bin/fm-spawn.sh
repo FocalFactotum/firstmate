@@ -4866,11 +4866,11 @@ preserve_relaunch_meta_head() {
       split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
-    !($1 in owned) && $1 != "pr" && $1 != "pr_head" && $1 !~ /^x_/
+    !($1 in owned) && $1 != "pr" && $1 != "pr_head" && $1 !~ /^x_(request|request_ts|followups|platform|reply_max_chars)$/
   ' "$RELAUNCH_META"
 }
 preserve_relaunch_meta_tail() {
-  awk -F= '$1 == "pr" || $1 == "pr_head" || $1 ~ /^x_/' "$RELAUNCH_META"
+  awk -F= '$1 == "pr" || $1 == "pr_head" || $1 ~ /^x_(request|request_ts|followups|platform|reply_max_chars)$/' "$RELAUNCH_META"
 }
 {
   echo "window=$META_WINDOW"

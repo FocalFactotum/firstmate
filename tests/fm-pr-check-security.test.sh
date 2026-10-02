@@ -3558,7 +3558,8 @@ test_relaunch_preserves_an_armed_merge_poll() {
   rm -rf "$dir/wt"
   fm_git_worktree "$dir/project" "$dir/wt" "task-$id"
   write_task_meta "$dir" "$id"
-  printf 'harness=claude\n' >> "$dir/home/state/$id.meta"
+  printf 'harness=claude\nx_custom=keep-before-pr\ncustom_note=keep-after-custom\nx_request_extra=also-before-pr\nother_note=keep-after-extra\n' \
+    >> "$dir/home/state/$id.meta"
   : > "$dir/home/config/trace-context"
   printf '%s\n' "$$" > "$dir/home/state/.lock"
   printf '%s on\n' "$$" > "$dir/home/state/.trace-context-effective"
@@ -3577,6 +3578,10 @@ EOF
   expected=0123456789abcdef0123456789abcdef01234567
   FM_TEST_GH_HEAD=$expected run_check_entry "$dir" "$id" https://github.com/example/repo/pull/802 \
     > "$dir/arm.out" 2> "$dir/arm.err" || fail "could not arm the merge poll before relaunch: $(cat "$dir/arm.err")"
+  # These Relay carriers are accepted after pr=; custom x_* fields above are
+  # not. Both groups must survive relaunch without invalidating the armed poll.
+  printf 'x_request=request-802\nx_request_ts=123\nx_followups=2\nx_platform=test\nx_reply_max_chars=500\n' \
+    >> "$dir/home/state/$id.meta"
   fm_pr_poll_artifacts_valid "$dir/home/state" "$id" "$POLL" \
     || fail "the merge poll was not validly armed before relaunch"
 
@@ -3593,7 +3598,23 @@ EOF
     || fail "relaunch lost the recorded PR"
   grep -qxF "pr_head=$expected" "$dir/home/state/$id.meta" \
     || fail "relaunch lost the recorded PR head"
-  pass "fm-control relaunch: an armed merge poll's metadata stays authenticated across a relaunch that records control_relaunch_tx"
+  # The published task-record contract preserves the custom fields' position
+  # among unrelated metadata, not merely their presence somewhere before pr=.
+  awk -F= '
+    $1 == "x_custom" { custom = NR }
+    $1 == "custom_note" { note = NR }
+    $1 == "x_request_extra" { extra = NR }
+    $1 == "other_note" { other = NR }
+    $1 == "pr" { pr = NR }
+    END { exit !(custom && custom < note && note < extra && extra < other && other < pr) }
+  ' "$dir/home/state/$id.meta" || fail "relaunch moved custom x_* fields out of their original metadata position"
+  local field
+  for field in x_custom=keep-before-pr x_request_extra=also-before-pr \
+    x_request=request-802 x_request_ts=123 x_followups=2 x_platform=test x_reply_max_chars=500; do
+    grep -qxF "$field" "$dir/home/state/$id.meta" \
+      || fail "relaunch lost preserved metadata: $field"
+  done
+  pass "fm-control relaunch: an armed merge poll stays authenticated with custom x_* fields, Relay carriers, transaction and trace context"
 }
 
 test_parser_matrix
