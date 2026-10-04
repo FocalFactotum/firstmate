@@ -95,6 +95,8 @@ Switching harness is therefore one ordinary relaunch rather than a separate mech
 A live secondmate's standing charter is not a copy of its current conversation, so replacing its agent without a handoff can discard context that exists nowhere durable.
 A live secondmate relaunch therefore requires an integrity-checked handoff or explicit context abandonment; [`bin/fm-control.sh --help`](../bin/fm-control.sh) owns the custody options and file requirements.
 The control plane snapshots the handoff before stopping the old agent and places it in a replacement-only brief without rewriting the standing charter.
+For non-Claude replacements, it first checks the encoded brief against a conservative launch-size budget that reserves argument and environment headroom; an oversized brief refuses before the old agent stops.
+`capture_secondmate_handoff` in [`bin/fm-control.sh`](../bin/fm-control.sh) owns the budget calculation; Claude instead receives a file-backed operational launch record.
 The replacement must read the handoff and confirm both receipt and readiness to resume through `bin/fm-context-handoff-receipt.sh`, with a receipt bound to that relaunch transaction and handoff digest.
 The control-owned raw snapshot and full delivery copy remain until that receipt is verified; an absent or invalid receipt leaves them in place and reports that resumption is unconfirmed.
 After confirmation, the control plane also retires a Claude replacement's handoff-bearing operational launch record before reporting complete custody cleanup.
@@ -207,6 +209,6 @@ The empirical basis for each adapter's value is the `harness-adapters` skill's v
 ## Verification
 
 - `tests/fm-control.test.sh` - the adapter contract for its verified-harness lane (adapters outside the lane pin their control mechanics in their own harness suites), the backend capability matrix, exact-id scoping, the closed verb list, the busy, idle, dead, and idempotent lifecycle cases, and marker non-regression, all against a stubbed session provider.
-- `tests/fm-control-relaunch.test.sh` - the relaunch transaction: identity preservation, harness switching, the progress note, checkpoint refusals, rollback after a failed launch, live-secondmate context custody and receipt (including relative home, state, and data inputs), and the endpoint-absence proof both verbs share - the Herdr reclaim of a destroyed endpoint, and tmux refusing one it cannot prove absent.
+- `tests/fm-control-relaunch.test.sh` - the relaunch transaction: identity preservation, harness switching, the progress note, checkpoint refusals, rollback after a failed launch, live-secondmate context custody and receipt through the delivered launch interface (including relative home, state, and data inputs), pre-stop launch-size refusals, and the endpoint-absence proof both verbs share - the Herdr reclaim of a destroyed endpoint, and tmux refusing one it cannot prove absent.
 - `tests/fm-secondmate-restart.test.sh` - the correlated terminal-success persist gate, local and remote handoff delivery, parent-side retention on uncertainty, and relative home and state inputs.
 - `tests/fm-control-herdr-smoke.test.sh` - the second state-verified backend against the real herdr binary, on an isolated throwaway lab session.

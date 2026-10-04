@@ -619,7 +619,18 @@ case "${rargs[1]:-}" in
     case "${FM_FAKE_SSH_MODE:-ok}" in
       slow-relaunch)
         : > "$FM_FAKE_DIR/remote-relaunch-start"
-        /bin/sleep 2
+        if [ -e "$FM_FAKE_DIR/remote-wait-for-local" ]; then
+          # A fixed two-second overlap races the real local spawn preflight.
+          # Keep the remote worker pending until local lifecycle progress is
+          # observed, with a bound that still exposes serialized relaunches.
+          attempts=0
+          while [ ! -e "$FM_FAKE_DIR/local-relaunch-during-remote" ] && [ "$attempts" -lt 150 ]; do
+            /bin/sleep 0.1
+            attempts=$((attempts + 1))
+          done
+        else
+          /bin/sleep 2
+        fi
         : > "$FM_FAKE_DIR/remote-relaunch-end"
         ;;
       relaunch-fail)
@@ -840,6 +851,7 @@ test_relaunches_do_not_block_persist_polling() {
   local dir out rc
   dir=$(new_case relaunch-polling)
   setup_remote_case "$dir" sm1 slow-relaunch
+  : > "$dir/fake/remote-wait-for-local"
   add_local_mate "$dir" sm2
   printf -- '- sm2 - local domain (home: %s; scope: things; projects: p; added 2026-09-03)\n' \
     "$dir/sm2-home" >> "$dir/home/data/secondmates.md"
