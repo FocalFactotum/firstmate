@@ -879,6 +879,17 @@ capture_secondmate_handoff() {
   REPLACEMENT_BRIEF_SHA256=$(fm_pr_sha256 "$REPLACEMENT_BRIEF_STAGE") \
     || die "replacement-only secondmate instructions cannot be hashed"
   REPLACEMENT_BRIEF_BYTES=$(wc -c < "$REPLACEMENT_BRIEF_STAGE" | tr -d '[:space:]')
+  if [ "$TARGET_HARNESS" != claude ]; then
+    local encoded_bytes arg_max environment_bytes launch_budget
+    encoded_bytes=$(set -o pipefail; "$SCRIPT_DIR/fm-operational-input.sh" encode launch-brief < "$REPLACEMENT_BRIEF_STAGE" | wc -c | tr -d '[:space:]') \
+      || die "could not measure replacement launch envelope"
+    arg_max=$(getconf ARG_MAX) || die "could not determine replacement launch limits"
+    environment_bytes=$(env | wc -c | tr -d '[:space:]')
+    launch_budget=$((arg_max / 2 - environment_bytes * 2 - 32768))
+    [ "$launch_budget" -le 65536 ] || launch_budget=65536
+    [ "$encoded_bytes" -le "$launch_budget" ] \
+      || die "replacement context brief exceeds conservative launch limits; live agent has not been stopped"
+  fi
   REPLACEMENT_BRIEF="$JOURNAL.brief-$REPLACEMENT_BRIEF_SHA256"
   RECEIPT_EXPECTED_STAGE=$(mktemp "$STATE/.$ID.control-relaunch.receipt-expected.XXXXXX") \
     || die "could not stage the expected context-handoff receipt"

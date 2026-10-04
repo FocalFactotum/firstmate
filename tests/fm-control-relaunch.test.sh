@@ -55,8 +55,9 @@ trap relaunch_cleanup EXIT
 make_tmux_stub() {  # <dir>
   local fb="$1/fakebin"
   mkdir -p "$fb"
-  cat > "$fb/tmux" <<'SH'
-#!/usr/bin/env bash
+  printf '#!/usr/bin/env bash\n. %q\nFM_FIXTURE_ENCODER=%q\n' \
+    "$ROOT/tests/relaunch-delivery-fixture.sh" "$ROOT/bin/fm-operational-input.sh" > "$fb/tmux"
+  cat >> "$fb/tmux" <<'SH'
 set -u
 D=$FM_FAKE_DIR
 case "${1:-}" in
@@ -83,12 +84,12 @@ case "${1:-}" in
           ;;
         *'encode launch-brief'* | *'Firstmate operational input waiting: read'*)
           cat "$D/becomes" > "$D/command"
-          if [ -n "${FM_CONTROL_RELAUNCH_BRIEF:-}" ] && [ -f "$FM_CONTROL_RELAUNCH_BRIEF" ]; then
-            cp "$FM_CONTROL_RELAUNCH_BRIEF" "$D/replacement-brief"
+          if fm_fixture_delivered_brief "$payload" "$D/replacement-brief" "$FM_FIXTURE_ENCODER"; then
             if [ "${FM_FAKE_CONFIRM_HANDOFF_RECEIPT:-0}" = 1 ]; then
-              receipt_command=$(grep -F 'fm-context-handoff-receipt.sh' "$FM_CONTROL_RELAUNCH_BRIEF" | tail -1)
-              [ -n "$receipt_command" ] || exit 1
-              /bin/bash -c "$receipt_command" >/dev/null
+              receipt_command=$(grep -F 'fm-context-handoff-receipt.sh' "$D/replacement-brief" | tail -1)
+              if [ -n "$receipt_command" ]; then
+                /bin/bash -c "$receipt_command" >/dev/null
+              fi
             fi
           fi
           [ -z "${FM_FAKE_LAUNCH_TRANSPORT_FAIL_AFTER_START:-}" ] || exit 1
@@ -1575,6 +1576,78 @@ test_empty_live_secondmate_handoff_refuses_before_stop() {
   pass "fm-control relaunch: empty live context cannot satisfy custody"
 }
 
+test_oversized_live_secondmate_handoff_refuses_before_stop() {
+  local harness axis dir handoff digest out rc padding
+  for harness in codex pi; do
+    for axis in argument aggregate; do
+      dir=$(new_case "sm-size-$harness-$axis" smsize)
+      add_secondmate_task "$dir" smsize
+      handoff="$dir/handoff.md"
+      if [ "$axis" = argument ]; then
+        python3 -c 'print("x" * 204800)' > "$handoff"
+        padding=
+      else
+        python3 -c 'print("x" * 40960)' > "$handoff"
+        padding=$(python3 -c 'print("x" * 50000)')
+        printf '#!/usr/bin/env bash\nprintf "262144\\n"\n' > "$dir/fakebin/getconf"
+        chmod +x "$dir/fakebin/getconf"
+      fi
+      digest=$(shasum -a 256 "$handoff" | awk '{print $1}')
+      out=$(FM_FIXTURE_ENV_PADDING="$padding" run_control "$dir" smsize relaunch \
+        --harness "$harness" --handoff-file "$handoff" --handoff-sha256 "$digest" 2>&1); rc=$?
+      expect_code 1 "$rc" "$harness $axis exhaustion must refuse before stopping"
+      assert_contains "$out" 'conservative launch limits' "the refusal should identify launch capacity"
+      [ "$(cat "$dir/fake/command")" = claude ] || fail "oversized $harness $axis handoff stopped the old agent"
+      [ ! -s "$dir/fake/literal" ] || fail "oversized $harness $axis handoff sent lifecycle input"
+    done
+  done
+  pass "fm-control relaunch: argument and aggregate limits refuse before stop"
+}
+
+test_argv_handoff_confirms_delivered_context() {
+  local harness dir handoff digest out rc
+  for harness in codex pi; do
+    dir=$(new_case "sm-delivered-$harness" smargv)
+    add_secondmate_task "$dir" smargv
+    printf '%s' "$harness" > "$dir/fake/becomes"
+    if [ "$harness" = pi ]; then
+      printf '#!/usr/bin/env bash\nprintf "Options: --tui-mode\\n"\n' > "$dir/fakebin/pi"
+      chmod +x "$dir/fakebin/pi"
+    fi
+    handoff="$dir/handoff.md"
+    printf 'Recoverable argv context.\n' > "$handoff"
+    digest=$(shasum -a 256 "$handoff" | awk '{print $1}')
+    out=$(FM_FAKE_CONFIRM_HANDOFF_RECEIPT=1 run_control "$dir" smargv relaunch \
+      --harness "$harness" --handoff-file "$handoff" --handoff-sha256 "$digest"); rc=$?
+    expect_code 0 "$rc" "$harness should confirm its delivered envelope"$'\n'"$out"
+    assert_contains "$(cat "$dir/fake/replacement-brief")" 'Recoverable argv context.' \
+      "the $harness replacement did not receive its context"
+    [ "$(journal_field "$dir" smargv context_custody)" = handoff-confirmed ] \
+      || fail "$harness did not confirm delivered custody"
+  done
+  pass "fm-control relaunch: argv adapters confirm only delivered context"
+}
+
+test_receipt_fixture_reads_only_emitted_launch_input() {
+  local dir emitted
+  dir=$(new_case delivery-interface delivery)
+  printf 'Delivered context.\n' > "$dir/delivered.md"
+  printf 'Undelivered context.\n' > "$dir/stale.md"
+  . "$ROOT/tests/relaunch-delivery-fixture.sh"
+  emitted="codex \"\$( '$ROOT/bin/fm-operational-input.sh' encode launch-brief < '$dir/delivered.md')\""
+  FM_CONTROL_RELAUNCH_BRIEF="$dir/stale.md" \
+    fm_fixture_delivered_brief "$emitted" "$dir/observed" "$ROOT/bin/fm-operational-input.sh" \
+    || fail "fixture could not consume emitted argv envelope"
+  cmp -s "$dir/delivered.md" "$dir/observed" || fail "fixture acknowledged context not delivered by argv"
+  rm -f "$dir/observed"
+  if FM_CONTROL_RELAUNCH_BRIEF="$dir/stale.md" \
+    fm_fixture_delivered_brief 'export FM_HOME=unused' "$dir/observed" "$ROOT/bin/fm-operational-input.sh"; then
+    fail "pre-launch exports were mistaken for context delivery"
+  fi
+  [ ! -e "$dir/observed" ] || fail "pre-launch export produced a delivered brief"
+  pass "receipt fixture consumes emitted launch input, never the custody environment pointer"
+}
+
 test_unconfirmed_live_secondmate_handoff_retains_full_context() {
   local dir handoff digest out rc raw brief record retained=0
   dir=$(new_case sm-custody-unconfirmed smuncertain)
@@ -2670,6 +2743,9 @@ test_live_secondmate_relaunch_requires_explicit_context_custody
 test_live_secondmate_handoff_waits_for_receipt_before_retiring_copies
 test_live_secondmate_handoff_accepts_relative_directories
 test_empty_live_secondmate_handoff_refuses_before_stop
+test_oversized_live_secondmate_handoff_refuses_before_stop
+test_receipt_fixture_reads_only_emitted_launch_input
+test_argv_handoff_confirms_delivered_context
 test_unconfirmed_live_secondmate_handoff_retains_full_context
 test_live_secondmate_relaunch_requires_explicit_abandonment_choice
 test_dead_secondmate_relaunch_needs_no_context_custody

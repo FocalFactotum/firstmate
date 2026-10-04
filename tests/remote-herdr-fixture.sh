@@ -36,6 +36,8 @@ STATE='$state'
 LOG='$log'
 SEND_FAIL='$send_fail'
 SOCKET='$socket'
+. '$ROOT/tests/relaunch-delivery-fixture.sh'
+FM_FIXTURE_ENCODER='$ROOT/bin/fm-operational-input.sh'
 SH
   cat >> "$script" <<'SH'
 printf '%s\n' "$*" >> "$LOG"
@@ -96,12 +98,15 @@ case "${1:-} ${2:-}" in
        | .working |= with_entries(select(.key != $p))' | save ;;
   "pane send-text")
     [ ! -f "$SEND_FAIL" ] || exit 1
-    if [ -n "${FM_CONTROL_RELAUNCH_BRIEF:-}" ] && [ -f "$FM_CONTROL_RELAUNCH_BRIEF" ]; then
-      receipt_command=$(grep -F 'fm-context-handoff-receipt.sh' "$FM_CONTROL_RELAUNCH_BRIEF" | tail -1)
-      [ -n "$receipt_command" ] || exit 1
-      /bin/bash -c "$receipt_command" >/dev/null
-    fi
     text=${args[3]:-}
+    delivered="$STATE.delivered-brief.$$"
+    if fm_fixture_delivered_brief "$text" "$delivered" "$FM_FIXTURE_ENCODER"; then
+      receipt_command=$(grep -F 'fm-context-handoff-receipt.sh' "$delivered" | tail -1)
+      if [ -n "$receipt_command" ]; then
+        /bin/bash -c "$receipt_command" >/dev/null
+      fi
+    fi
+    rm -f -- "$delivered"
     if [ "$text" = /quit ] || [ "$text" = /exit ]; then
       jq_state --arg p "${3:-}" '.typed[$p] = true | .exiting[$p] = true' | save
     else

@@ -44,8 +44,9 @@ trap 'fm_test_remove_tree "$TMP_ROOT"' EXIT
 make_stub() {  # <case-dir>
   local fb="$1/fakebin"
   mkdir -p "$fb"
-  cat > "$fb/tmux" <<'SH'
-#!/usr/bin/env bash
+  printf '#!/usr/bin/env bash\n. %q\nFM_FIXTURE_ENCODER=%q\n' \
+    "$ROOT/tests/relaunch-delivery-fixture.sh" "$ROOT/bin/fm-operational-input.sh" > "$fb/tmux"
+  cat >> "$fb/tmux" <<'SH'
 set -u
 D=$FM_FAKE_DIR
 case "${1:-}" in
@@ -79,12 +80,12 @@ case "${1:-}" in
           ;;
         *'encode launch-brief'* | *'Firstmate operational input waiting: read'*)
           cat "$D/becomes" > "$D/command.$target"
-          if [ -n "${FM_CONTROL_RELAUNCH_BRIEF:-}" ] && [ -f "$FM_CONTROL_RELAUNCH_BRIEF" ]; then
-            cp "$FM_CONTROL_RELAUNCH_BRIEF" "$D/replacement-brief"
+          if fm_fixture_delivered_brief "$payload" "$D/replacement-brief" "$FM_FIXTURE_ENCODER"; then
             if [ "${FM_FAKE_CONFIRM_HANDOFF_RECEIPT:-0}" = 1 ]; then
-              receipt_command=$(grep -F 'fm-context-handoff-receipt.sh' "$FM_CONTROL_RELAUNCH_BRIEF" | tail -1)
-              [ -n "$receipt_command" ] || exit 1
-              /bin/bash -c "$receipt_command" >/dev/null
+              receipt_command=$(grep -F 'fm-context-handoff-receipt.sh' "$D/replacement-brief" | tail -1)
+              if [ -n "$receipt_command" ]; then
+                /bin/bash -c "$receipt_command" >/dev/null
+              fi
             fi
           fi
           ;;

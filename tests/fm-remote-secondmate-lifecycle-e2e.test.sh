@@ -65,6 +65,8 @@ set -u
 log='$TMUX_LOG'
 state='$TMUX_STATE'
 fail_send='$TMP_ROOT/tmux-send-fail'
+. '$ROOT/tests/relaunch-delivery-fixture.sh'
+encoder='$ROOT/bin/fm-operational-input.sh'
 printf '%s\n' "\$*" >> "\$log"
 case "\${1:-}" in
   has-session|new-session|set-window-option) exit 0 ;;
@@ -97,11 +99,23 @@ case "\${1:-}" in
   capture-pane) printf '❯\n'; exit 0 ;;
   send-keys)
     [ ! -f "\$fail_send" ] || exit 1
-    if [ -n "\${FM_CONTROL_RELAUNCH_BRIEF:-}" ] && [ -f "\$FM_CONTROL_RELAUNCH_BRIEF" ]; then
-      receipt_command=\$(grep -F 'fm-context-handoff-receipt.sh' "\$FM_CONTROL_RELAUNCH_BRIEF" | tail -1)
-      [ -n "\$receipt_command" ] || exit 1
-      /bin/bash -c "\$receipt_command" >/dev/null
+    shift
+    literal=0
+    while [ "\$#" -gt 0 ]; do
+      case "\$1" in
+        -t) shift 2 ;;
+        -l) literal=1; shift ;;
+        *) break ;;
+      esac
+    done
+    delivered="\$state.delivered-brief.\$\$"
+    if [ "\$literal" = 1 ] && fm_fixture_delivered_brief "\${1:-}" "\$delivered" "\$encoder"; then
+      receipt_command=\$(grep -F 'fm-context-handoff-receipt.sh' "\$delivered" | tail -1)
+      if [ -n "\$receipt_command" ]; then
+        /bin/bash -c "\$receipt_command" >/dev/null
+      fi
     fi
+    rm -f -- "\$delivered"
     exit 0
     ;;
   kill-window) rm -f -- "\$state"; exit 0 ;;
