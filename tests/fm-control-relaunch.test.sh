@@ -82,9 +82,20 @@ case "${1:-}" in
           printf 'zsh' > "$D/command"
           [ -z "${FM_FAKE_EXIT_TRANSPORT_FAIL_AFTER_STOP:-}" ] || exit 1
           ;;
-        *'encode launch-brief'* | *'Firstmate operational input waiting: read'*)
+        *'--auto'*)
           cat "$D/becomes" > "$D/command"
-          if fm_fixture_delivered_brief "$payload" "$D/replacement-brief" "$FM_FIXTURE_ENCODER"; then
+          ;;
+        *'encode launch-brief'* | *'Firstmate operational input waiting: read'* | 'Read the brief at '*' and follow it exactly.')
+          cat "$D/becomes" > "$D/command"
+          if [[ "$payload" = 'Read the brief at '* ]]; then
+            brief_path=${payload#Read the brief at }
+            brief_path=${brief_path% and follow it exactly.}
+            cp "$brief_path" "$D/replacement-brief"
+            : > "$D/pointer-delivered"
+          else
+            fm_fixture_delivered_brief "$payload" "$D/replacement-brief" "$FM_FIXTURE_ENCODER"
+          fi
+          if [ -s "$D/replacement-brief" ]; then
             if [ "${FM_FAKE_CONFIRM_HANDOFF_RECEIPT:-0}" = 1 ]; then
               receipt_command=$(grep -F 'fm-context-handoff-receipt.sh' "$D/replacement-brief" | tail -1)
               if [ -n "$receipt_command" ]; then
@@ -113,7 +124,13 @@ case "${1:-}" in
   display-message)
     for a in "$@"; do
       case "$a" in
-        *cursor_y*) printf '1\n'; exit 0 ;;
+        *cursor_y*)
+          if [ "$(cat "$D/command")" = kimi ]; then
+            if [ -f "$D/pointer-delivered" ]; then printf '3\n'; else printf '2\n'; fi
+          else
+            printf '1\n'
+          fi
+          exit 0 ;;
         *pane_current_command*) cat "$D/command"; printf '\n'; exit 0 ;;
         *pane_current_path*)
           if [ -n "${FM_FAKE_CWD_RACE_READY:-}" ]; then
@@ -126,6 +143,10 @@ case "${1:-}" in
     printf 'fakepane\n'; exit 0 ;;
   capture-pane)
     [ -z "${FM_FAKE_COMPOSER_READ_FAIL:-}" ] || exit 1
+    if [ "$(cat "$D/command")" = kimi ]; then
+      printf 'Welcome to Kimi Code!\n'
+      [ ! -f "$D/pointer-delivered" ] || printf 'context: 1%%\n'
+    fi
     if [ -s "$D/composer" ]; then
       printf '╭────╮\n│ %s  │\n╰────╯\n' "$(cat "$D/composer")"
     else
@@ -1604,6 +1625,33 @@ test_oversized_live_secondmate_handoff_refuses_before_stop() {
   pass "fm-control relaunch: argument and aggregate limits refuse before stop"
 }
 
+test_large_file_pointer_handoff_confirms_delivered_context() {
+  local harness dir handoff digest out rc
+  for harness in kimi claude; do
+    dir=$(new_case "sm-pointer-$harness" smpointer)
+    add_secondmate_task "$dir" smpointer
+    printf '%s' "$harness" > "$dir/fake/becomes"
+    if [ "$harness" = kimi ]; then
+      printf '#!/usr/bin/env bash\nexit 0\n' > "$dir/fakebin/kimi"
+      chmod +x "$dir/fakebin/kimi"
+    fi
+    handoff="$dir/handoff.md"
+    python3 -c 'print("Recoverable pointer context.\\n" + "x" * 71680)' > "$handoff"
+    digest=$(shasum -a 256 "$handoff" | awk '{print $1}')
+    out=$(FM_FAKE_CONFIRM_HANDOFF_RECEIPT=1 run_control "$dir" smpointer relaunch \
+      --harness "$harness" --handoff-file "$handoff" --handoff-sha256 "$digest"); rc=$?
+    expect_code 0 "$rc" "$harness must deliver context over 64 KiB by pointer"$'\n'"$out"
+    [ "$(wc -c < "$dir/fake/replacement-brief")" -gt 65536 ] \
+      || fail "$harness did not deliver the full large replacement brief"
+    assert_contains "$(cat "$dir/fake/replacement-brief")" "$(cat "$handoff")" \
+      "$harness must deliver the intact handoff"
+    [ "$(journal_field "$dir" smpointer context_custody)" = handoff-confirmed ] \
+      || fail "$harness did not confirm delivered custody"
+    [ "$(cat "$dir/fake/command")" = "$harness" ] || fail "$harness replacement is not running"
+  done
+  pass "fm-control relaunch: file-pointer adapters deliver context over 64 KiB"
+}
+
 test_argv_handoff_confirms_delivered_context() {
   local harness dir handoff digest out rc
   for harness in codex pi; do
@@ -2744,6 +2792,7 @@ test_live_secondmate_handoff_waits_for_receipt_before_retiring_copies
 test_live_secondmate_handoff_accepts_relative_directories
 test_empty_live_secondmate_handoff_refuses_before_stop
 test_oversized_live_secondmate_handoff_refuses_before_stop
+test_large_file_pointer_handoff_confirms_delivered_context
 test_receipt_fixture_reads_only_emitted_launch_input
 test_argv_handoff_confirms_delivered_context
 test_unconfirmed_live_secondmate_handoff_retains_full_context

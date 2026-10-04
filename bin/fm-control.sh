@@ -879,7 +879,9 @@ capture_secondmate_handoff() {
   REPLACEMENT_BRIEF_SHA256=$(fm_pr_sha256 "$REPLACEMENT_BRIEF_STAGE") \
     || die "replacement-only secondmate instructions cannot be hashed"
   REPLACEMENT_BRIEF_BYTES=$(wc -c < "$REPLACEMENT_BRIEF_STAGE" | tr -d '[:space:]')
-  if [ "$TARGET_HARNESS" != claude ]; then
+  # Claude delivers an operational-record pointer; Kimi sends a file pointer
+  # after launch. Neither carries the replacement brief's contents in argv.
+  if [ "$TARGET_HARNESS" != claude ] && [ "$TARGET_HARNESS" != kimi ]; then
     local encoded_bytes arg_max environment_bytes launch_budget
     encoded_bytes=$(set -o pipefail; "$SCRIPT_DIR/fm-operational-input.sh" encode launch-brief < "$REPLACEMENT_BRIEF_STAGE" | wc -c | tr -d '[:space:]') \
       || die "could not measure replacement launch envelope"
