@@ -146,6 +146,10 @@ MODEL=()
 EFFORT=()
 RESTART_PID=()
 RESTART_RESULT=()
+REPLY_SCAN_SIGNATURE=()
+REPLY_SCAN_STATE=()
+REPLY_SCAN_VERB=()
+REPLY_SCAN_LINE=()
 
 restarted_count=0
 nudged_count=0
@@ -161,27 +165,41 @@ first_reported_line() {  # <text>
 # Classify the latest correlated reply without allowing the generic pending-reply
 # resolver to turn progress or failure into permission to replace the agent.
 classify_persist_reply() {  # <array-index>
-  local i=$1 corr rec status_file line latest='' verb
+  local i=$1 corr rec status_file line latest='' verb signature cache_key
   PERSIST_REPLY_STATE=pending
   PERSIST_REPLY_VERB=
   PERSIST_REPLY_LINE=
   corr=${CORR[i]}
   rec=$(fm_pending_reply_path "$STATE" "$corr")
   status_file=$(fm_pending_reply_get "$rec" parent_status)
-  [ -f "$status_file" ] || return 0
-  while IFS= read -r line || [ -n "$line" ]; do
-    [ -n "$line" ] || continue
-    fm_pending_reply_line_resolves "$line" "$corr" || continue
-    latest=$line
-  done < "$status_file"
-  [ -n "$latest" ] || return 0
-  PERSIST_REPLY_LINE=$latest
-  verb=$(status_line_verb "$latest")
-  PERSIST_REPLY_VERB=$verb
-  case "$verb" in
-    done) PERSIST_REPLY_STATE=success ;;
-    needs-decision|blocked|failed) PERSIST_REPLY_STATE=failure ;;
-  esac
+  signature=$(fm_pending_reply_file_signature "$status_file")
+  cache_key="$corr:${#status_file}:$status_file:$signature"
+  if [ "$signature" != unreadable ] && [ "${REPLY_SCAN_SIGNATURE[i]-}" = "$cache_key" ]; then
+    PERSIST_REPLY_STATE=${REPLY_SCAN_STATE[i]}
+    PERSIST_REPLY_VERB=${REPLY_SCAN_VERB[i]}
+    PERSIST_REPLY_LINE=${REPLY_SCAN_LINE[i]}
+    return 0
+  fi
+  if [ -f "$status_file" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      [ -n "$line" ] || continue
+      fm_pending_reply_line_resolves "$line" "$corr" || continue
+      latest=$line
+    done < "$status_file"
+  fi
+  if [ -n "$latest" ]; then
+    PERSIST_REPLY_LINE=$latest
+    verb=$(status_line_verb "$latest")
+    PERSIST_REPLY_VERB=$verb
+    case "$verb" in
+      done) PERSIST_REPLY_STATE=success ;;
+      needs-decision|blocked|failed) PERSIST_REPLY_STATE=failure ;;
+    esac
+  fi
+  REPLY_SCAN_SIGNATURE[i]=$cache_key
+  REPLY_SCAN_STATE[i]=$PERSIST_REPLY_STATE
+  REPLY_SCAN_VERB[i]=$PERSIST_REPLY_VERB
+  REPLY_SCAN_LINE[i]=$PERSIST_REPLY_LINE
 }
 
 restart_sha256_file() {  # <path>

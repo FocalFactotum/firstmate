@@ -419,6 +419,44 @@ test_only_done_persist_reply_releases_restart_gate() {
 }
 
 # --- T2d: progress does not release the gate, but later success does ---------
+test_unchanged_persist_history_is_scanned_once() {
+  local reply dir out rc scans expected n
+  for reply in absent working; do
+    dir=$(new_case "cached-history-$reply")
+    add_local_mate "$dir" sm1
+    n=0
+    while [ "$n" -lt 128 ]; do
+      printf 'done [corr=0000000000000000]: historical response %s\n' "$n" \
+        >> "$dir/home/state/sm1.status"
+      n=$((n + 1))
+    done
+    expected=128
+    if [ "$reply" = working ]; then
+      arm_answer "$dir" sm1
+      printf 'working\n' > "$dir/fake/answer-verb"
+      expected=129
+    fi
+    cat > "$dir/trace-env" <<'SH'
+case "$0" in
+  */bin/fm-secondmate-restart.sh)
+    exec 2>> "$FM_FIXTURE_REPLY_TRACE"
+    PS4='+${FUNCNAME[1]-}:${FUNCNAME[0]-}: '
+    set -x
+    ;;
+esac
+SH
+    out=$(BASH_ENV="$dir/trace-env" FM_FIXTURE_REPLY_TRACE="$dir/reply-trace" \
+      FM_TEST_PERSIST_WAIT=0 run_restart "$dir" sm1); rc=$?
+    expect_code 3 "$rc" "unchanged $reply history must keep the restart gate closed"$'\n'"$out"
+    assert_contains "$out" 'nudged: sm1:' "unchanged $reply history must use the safe fallback"
+    assert_no_grep '^/exit$' "$dir/fake/literal" "unchanged $reply history stopped the live mate"
+    scans=$(grep -c 'classify_persist_reply:fm_pending_reply_line_resolves: local ' "$dir/reply-trace")
+    [ "$scans" -eq "$expected" ] \
+      || fail "normal polling and deadline recheck examined $scans lines instead of $expected"
+  done
+  pass "unchanged status history is classified once across polling and deadline recheck"
+}
+
 test_answer_between_resolution_and_timeout_wins() {
   local dir out rc
   dir=$(new_case answer-during-wait)
@@ -1019,6 +1057,7 @@ test_restart_accepts_relative_directories
 test_arrived_answer_precedes_deadline_check
 test_only_done_persist_reply_releases_restart_gate
 test_answer_between_resolution_and_timeout_wins
+test_unchanged_persist_history_is_scanned_once
 test_unprovable_runtime_falls_back
 test_unknown_mate_is_accounted_for
 test_refused_restart_falls_back_without_claiming_a_reload
