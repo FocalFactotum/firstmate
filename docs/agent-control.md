@@ -100,7 +100,8 @@ The control-owned raw snapshot and full delivery copy remain until that receipt 
 After confirmation, the control plane also retires a Claude replacement's handoff-bearing operational launch record before reporting complete custody cleanup.
 A direct relaunch leaves the caller-owned source handoff untouched; only the control-owned copies are retired.
 `--abandon-live-context` is a distinct, auditable no-handoff path and requires current explicit captain authority.
-An already-dead or proven-missing agent can be relaunched without either custody option, because it cannot provide recoverable live conversation; the ordinary endpoint recovery proof still applies.
+An already-dead agent needs no custody option, and a missing endpoint still follows the [ordinary recovery proof and secondmate recovery path](#reclaiming-a-task-whose-endpoint-is-gone).
+If a handoff is supplied after the old agent dies, the replacement still receives it and must confirm receipt before the control-owned copies are retired.
 [`bin/fm-secondmate-restart.sh`](../bin/fm-secondmate-restart.sh) owns the automatic persist gate and parent-side handoff lifecycle.
 
 ### Reclaiming a task whose endpoint is gone

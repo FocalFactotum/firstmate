@@ -46,7 +46,7 @@ This touches only the firstmate repo and its own worktrees, never anything under
    - `nudge-secondmates: fm-<id>...|none`
 
    The two second-mate sets are disjoint and the script owns the split; do not re-derive it.
-   `restart-secondmates:` carries every live mate the pass left on the latest commit, whether it advanced or was already there.
+   `restart-secondmates:` carries the eligible live mates the pass left on the latest commit, whether they advanced or were already there; the rest go on `nudge-secondmates:`.
    A mate reaches neither set only because its home was skipped, because it has no live endpoint recorded here, or because its endpoint was positively classified as dead or missing.
    A skipped genuine divergence still requires attention through its durable reconciliation record; the other two cases need no update action from you.
 
