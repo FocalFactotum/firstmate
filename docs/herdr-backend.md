@@ -288,7 +288,8 @@ Projected children are placed in one contiguous block immediately after their ex
 - `python3`.
 - The account-private per-session lock.
 
-An adjacent current-format `└` child with a unique workspace id and visible token extends the exact launcher's block as read-only layout evidence, allowing multiple homes to project beneath the same launcher without reading another home's journals.
+An adjacent current-format `└` child with a unique workspace id and visible token can extend the exact launcher's block as read-only layout evidence, allowing multiple homes to project beneath the same launcher without reading another home's journals.
+A valid same-home, same-session version 2 journal recording that child under a different exact parent breaks the block for ordering, binding publication, and reclaim, as pinned by `test_projection_foreign_recorded_child_breaks_launcher_block` in `tests/fm-backend-herdr.test.sh`.
 That evidence grants no ownership or mutation authority over the sibling; reclaim and cleanup still require the target task's own exact home, session, workspace, tab, and pane binding.
 A historical child extends the launcher's block only when this home's version 2 journal matches the session, exact parent and child workspace ids, and the child's visible label token.
 The journal reader accepts current `└` labels and historical `firstmate/<task>` or `2ndmate-<id>/<task>` labels; the live child may retain its old prefix after its parent is renamed.
